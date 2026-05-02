@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "841789261885",
+    "project_id": "sahara-club-spa",
+    "storage_bucket": "sahara-club-spa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:841789261885:android:c9dc6d23e9840784884254",
+        "android_client_info": {
+          "package_name": "com.sahara.club.spa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTK3wxpk3Nx3zxz_WGWvazJB7jH7-a9tY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:841789261885:android:fa19b5900c55165d884254",
+        "android_client_info": {
+          "package_name": "com.saharaclub.sahara_club_spa_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTK3wxpk3Nx3zxz_WGWvazJB7jH7-a9tY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
