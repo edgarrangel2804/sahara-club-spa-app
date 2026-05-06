@@ -7,10 +7,9 @@ import 'package:sahara_club_spa_app/features/client/client_shell.dart';
 import 'package:sahara_club_spa_app/features/services/screens/service_detail_screen.dart';
 import 'package:sahara_club_spa_app/features/bookings/screens/booking_request_screen.dart';
 import 'package:sahara_club_spa_app/data/models/spa_service.dart';
-import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/features/admin/admin_dashboard_page.dart';
 import 'package:sahara_club_spa_app/features/reception/reception_shell.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:sahara_club_spa_app/features/therapist/therapist_shell.dart';
 
 class AppRoutes {
   static const String splash          = '/';
@@ -54,10 +53,7 @@ Route<dynamic> onGenerateRoute(RouteSettings settings) {
       return _fade(const AdminDashboardPage());
 
     case AppRoutes.therapistDashboard:
-      return _fade(const _PlaceholderScreen(
-        title: 'Panel Terapeuta',
-        icon: Icons.spa_outlined,
-      ));
+      return _fade(const TherapistShell());
 
     case AppRoutes.receptionDashboard:
       return _fade(const ReceptionShell());
@@ -78,49 +74,4 @@ PageRouteBuilder<dynamic> _fade(Widget page) {
       );
     },
   );
-}
-
-// ── Pantalla placeholder para roles aún no implementados ──────────────────
-
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-  final IconData icon;
-
-  const _PlaceholderScreen({required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: SaharaColors.black,
-      body: Container(
-        decoration: const BoxDecoration(gradient: SaharaGradients.backgroundMain),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: SaharaColors.gold, size: 48),
-              const SizedBox(height: 20),
-              Text(
-                title,
-                style: GoogleFonts.playfairDisplay(
-                  fontSize: 22,
-                  color: SaharaColors.gold,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Próximamente',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: SaharaColors.grayText,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

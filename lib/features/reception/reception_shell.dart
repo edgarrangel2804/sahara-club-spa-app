@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
@@ -18,41 +19,188 @@ class ReceptionShell extends StatefulWidget {
 class _ReceptionShellState extends State<ReceptionShell> {
   int _index = 0;
   int _pendingCount = 0;
+  String _userName  = 'Recepcionista';
+  String? _avatarUrl;
   final _repo = ReceptionRepository();
+  final _homeRefresh = ValueNotifier<int>(0);
 
   static const _navItems = [
-    _NavItem(icon: Icons.dashboard_outlined,      activeIcon: Icons.dashboard_rounded,      label: 'Dashboard'),
-    _NavItem(icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month_rounded, label: 'Agenda'),
-    _NavItem(icon: Icons.people_outline,          activeIcon: Icons.people_rounded,         label: 'Clientes'),
+    _NavItem(icon: Icons.home_outlined,            activeIcon: Icons.home_rounded,            label: 'Inicio'),
+    _NavItem(icon: Icons.calendar_month_outlined,  activeIcon: Icons.calendar_month_rounded,  label: 'Agenda'),
+    _NavItem(icon: Icons.people_outline,           activeIcon: Icons.people_rounded,          label: 'Clientes'),
+    _NavItem(icon: Icons.chat_bubble_outline,      activeIcon: Icons.chat_bubble_rounded,     label: 'Mensajes'),
+    _NavItem(icon: Icons.point_of_sale_outlined,   activeIcon: Icons.point_of_sale,           label: 'Caja'),
   ];
 
   @override
   void initState() {
     super.initState();
     _loadPendingCount();
+    _loadUserProfile();
+  }
+
+  @override
+  void dispose() {
+    _homeRefresh.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPendingCount() async {
     final list = await _repo.getPendingRequests();
     if (!mounted) return;
     setState(() => _pendingCount = list.length);
+    _homeRefresh.value++;
   }
+
+  Future<void> _loadUserProfile() async {
+    final user = AuthService().currentUser;
+    if (user == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', user.id)
+          .single();
+      if (!mounted) return;
+      setState(() {
+        _userName  = data['full_name'] as String? ?? 'Recepcionista';
+        _avatarUrl = data['avatar_url'] as String?;
+      });
+    } catch (_) {
+      // Fallback a user metadata si falla la consulta
+      final metaName = user.userMetadata?['full_name'] as String?;
+      if (metaName != null && mounted) setState(() => _userName = metaName);
+    }
+  }
+
+  Future<void> _logout() async {
+    await AuthService().signOut();
+    if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+  }
+
+  String _initials(String name) => name
+      .trim()
+      .split(' ')
+      .where((w) => w.isNotEmpty)
+      .take(2)
+      .map((w) => w[0].toUpperCase())
+      .join();
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+
+    final pages = [
+      ReceptionHomePage(repo: _repo, onPendingChanged: _loadPendingCount, refreshNotifier: _homeRefresh),
+      ReceptionAgendaPage(repo: _repo),
+      ReceptionClientsPage(repo: _repo),
+      const _MensajesPlaceholder(),
+      const _CajaPlaceholder(),
+    ];
+
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0B0B0B),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0A0A0A),
+          elevation: 0,
+          centerTitle: true,
+          title: Text('SAHARA CLUB SPA', style: GoogleFonts.playfairDisplay(
+            fontSize: 13, color: SaharaColors.gold,
+            letterSpacing: 4, fontWeight: FontWeight.w400,
+          )),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(height: 1,
+                color: SaharaColors.gold.withValues(alpha: 0.1)),
+          ),
+          actions: [
+            PopupMenuButton<String>(
+              color: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              offset: const Offset(0, 48),
+              onSelected: (v) { if (v == 'logout') _logout(); },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  enabled: false,
+                  child: Row(
+                    children: [
+                      _AvatarWidget(
+                        avatarUrl: _avatarUrl,
+                        initials:  _initials(_userName),
+                        size: 32,
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_userName.split(' ').first, style: GoogleFonts.inter(
+                            fontSize: 13, color: SaharaColors.whiteSoft,
+                            fontWeight: FontWeight.w600,
+                          )),
+                          Text('Recepcionista', style: GoogleFonts.inter(
+                            fontSize: 11, color: SaharaColors.grayText,
+                          )),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'logout',
+                  child: Row(children: [
+                    const Icon(Icons.logout_rounded,
+                        color: Color(0xFFEF5350), size: 18),
+                    const SizedBox(width: 10),
+                    Text('Cerrar Sesión', style: GoogleFonts.inter(
+                      fontSize: 13, color: const Color(0xFFEF5350),
+                    )),
+                  ]),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: _AvatarWidget(
+                  avatarUrl: _avatarUrl,
+                  initials:  _initials(_userName),
+                  size: 32,
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: IndexedStack(index: _index, children: pages),
+        bottomNavigationBar: _BottomNav(
+          currentIndex: _index,
+          items: _navItems,
+          pendingBadge: _pendingCount,
+          onTap: (i) {
+            if (i == 0 && _index != 0) _homeRefresh.value++;
+            setState(() => _index = i);
+          },
+        ),
+      );
+    }
+
+    // ── Desktop / Tablet ────────────────────────────────────────────────────
     return Scaffold(
       backgroundColor: SaharaColors.black,
       body: Row(
         children: [
-          // ── Sidebar ────────────────────────────────────────────────────
-          _Sidebar(
-            currentIndex: _index,
-            items: _navItems,
-            pendingBadge: _pendingCount,
-            onTap: (i) => setState(() => _index = i),
-            onLogout: _logout,
+          SizedBox(
+            width: 240,
+            child: _Sidebar(
+              currentIndex: _index,
+              items:        _navItems,
+              pendingBadge: _pendingCount,
+              userName:     _userName,
+              avatarUrl:    _avatarUrl,
+              onTap:        (i) => setState(() => _index = i),
+              onLogout:     _logout,
+            ),
           ),
-          // ── Contenido ──────────────────────────────────────────────────
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
@@ -62,33 +210,156 @@ class _ReceptionShellState extends State<ReceptionShell> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: IndexedStack(
-                index: _index,
-                children: [
-                  ReceptionHomePage(repo: _repo, onPendingChanged: _loadPendingCount),
-                  ReceptionAgendaPage(repo: _repo),
-                  ReceptionClientsPage(repo: _repo),
-                ],
-              ),
+              child: IndexedStack(index: _index, children: pages),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Future<void> _logout() async {
-    await AuthService().signOut();
-    if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+// ── Avatar Widget ─────────────────────────────────────────────────────────────
+
+class _AvatarWidget extends StatelessWidget {
+  final String? avatarUrl;
+  final String  initials;
+  final double  size;
+
+  const _AvatarWidget({
+    required this.avatarUrl,
+    required this.initials,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (avatarUrl != null && avatarUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: size / 2,
+        backgroundImage: NetworkImage(avatarUrl!),
+        backgroundColor: SaharaColors.gold.withValues(alpha: 0.12),
+        onBackgroundImageError: (_, __) {},
+        child: null,
+      );
+    }
+
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        color: SaharaColors.gold.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+        border: Border.all(color: SaharaColors.gold.withValues(alpha: 0.35)),
+      ),
+      child: Center(
+        child: Text(initials, style: GoogleFonts.inter(
+          fontSize: size * 0.34,
+          color: SaharaColors.gold,
+          fontWeight: FontWeight.w700,
+        )),
+      ),
+    );
   }
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────────
+// ── Bottom Navigation Bar ─────────────────────────────────────────────────────
+
+class _BottomNav extends StatelessWidget {
+  final int currentIndex;
+  final List<_NavItem> items;
+  final int pendingBadge;
+  final ValueChanged<int> onTap;
+
+  const _BottomNav({
+    required this.currentIndex,
+    required this.items,
+    required this.pendingBadge,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        border: Border(top: BorderSide(color: SaharaColors.gold.withValues(alpha: 0.1))),
+      ),
+      child: SafeArea(
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(items.length, (i) {
+              final item       = items[i];
+              final isSelected = i == currentIndex;
+              final hasBadge   = i == 0 && pendingBadge > 0;
+
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onTap(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(
+                            isSelected ? item.activeIcon : item.icon,
+                            size: 22,
+                            color: isSelected
+                                ? SaharaColors.gold
+                                : SaharaColors.grayText.withValues(alpha: 0.5),
+                          ),
+                          if (hasBadge)
+                            Positioned(
+                              top: -4, right: -6,
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFFB74D),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text('$pendingBadge',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8, color: Colors.black,
+                                    fontWeight: FontWeight.w800,
+                                  )),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(item.label,
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: isSelected
+                              ? SaharaColors.gold
+                              : SaharaColors.grayText.withValues(alpha: 0.5),
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                        )),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Sidebar (Desktop) ─────────────────────────────────────────────────────────
 
 class _Sidebar extends StatelessWidget {
   final int currentIndex;
   final List<_NavItem> items;
   final int pendingBadge;
+  final String userName;
+  final String? avatarUrl;
   final ValueChanged<int> onTap;
   final VoidCallback onLogout;
 
@@ -96,19 +367,23 @@ class _Sidebar extends StatelessWidget {
     required this.currentIndex,
     required this.items,
     required this.pendingBadge,
+    required this.userName,
+    required this.avatarUrl,
     required this.onTap,
     required this.onLogout,
   });
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthService().currentUser;
-    final name = user?.userMetadata?['full_name'] as String? ?? 'Recepcionista';
-    final initials = name.trim().split(' ').where((w) => w.isNotEmpty).take(2)
-        .map((w) => w[0].toUpperCase()).join();
+    final initials = userName
+        .trim()
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0].toUpperCase())
+        .join();
 
     return Container(
-      width: 240,
       height: double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A0A),
@@ -118,7 +393,7 @@ class _Sidebar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Logo ────────────────────────────────────────────────────────
+          // ── Logo ──────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 8),
             child: Column(
@@ -137,11 +412,12 @@ class _Sidebar extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Container(height: 1, color: SaharaColors.gold.withValues(alpha: 0.08)),
+            child: Container(
+                height: 1, color: SaharaColors.gold.withValues(alpha: 0.08)),
           ),
           const SizedBox(height: 8),
 
-          // ── Badge de rol ─────────────────────────────────────────────────
+          // ── Badge de rol ──────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: Container(
@@ -149,13 +425,16 @@ class _Sidebar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: SaharaColors.gold.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: SaharaColors.gold.withValues(alpha: 0.15)),
+                border: Border.all(
+                    color: SaharaColors.gold.withValues(alpha: 0.15)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(width: 6, height: 6,
-                    decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle)),
+                  Container(
+                    width: 6, height: 6,
+                    decoration: const BoxDecoration(
+                        color: Color(0xFF4CAF50), shape: BoxShape.circle)),
                   const SizedBox(width: 7),
                   Text('Panel Recepción', style: GoogleFonts.inter(
                     fontSize: 10, color: SaharaColors.gold, letterSpacing: 0.5,
@@ -166,46 +445,41 @@ class _Sidebar extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // ── Navegación ───────────────────────────────────────────────────
+          // ── Navegación ────────────────────────────────────────────────────
           ...List.generate(items.length, (i) => _SidebarItem(
-                item: items[i],
-                isSelected: i == currentIndex,
-                badge: i == 0 ? pendingBadge : 0,
-                onTap: () => onTap(i),
-              )),
+            item: items[i],
+            isSelected: i == currentIndex,
+            badge: i == 0 ? pendingBadge : 0,
+            onTap: () => onTap(i),
+          )),
 
           const Spacer(),
 
-          // ── Divisor ──────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Container(height: 1, color: SaharaColors.gold.withValues(alpha: 0.08)),
+            child: Container(
+                height: 1, color: SaharaColors.gold.withValues(alpha: 0.08)),
           ),
           const SizedBox(height: 16),
 
-          // ── Usuario + logout ─────────────────────────────────────────────
+          // ── Usuario ───────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             child: Row(
               children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    color: SaharaColors.gold.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: SaharaColors.gold.withValues(alpha: 0.2)),
-                  ),
-                  child: Center(child: Text(initials, style: GoogleFonts.inter(
-                    fontSize: 12, color: SaharaColors.gold, fontWeight: FontWeight.w700,
-                  ))),
+                _AvatarWidget(
+                  avatarUrl: avatarUrl,
+                  initials:  initials,
+                  size: 36,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name.split(' ').first, style: GoogleFonts.inter(
-                        fontSize: 13, color: SaharaColors.whiteSoft, fontWeight: FontWeight.w500,
+                      Text(userName.split(' ').first, style: GoogleFonts.inter(
+                        fontSize: 13, color: SaharaColors.whiteSoft,
+                        fontWeight: FontWeight.w500,
                       )),
                       Text('Recepcionista', style: GoogleFonts.inter(
                         fontSize: 10, color: SaharaColors.grayText,
@@ -213,10 +487,14 @@ class _Sidebar extends StatelessWidget {
                     ],
                   ),
                 ),
-                GestureDetector(
-                  onTap: onLogout,
-                  child: Icon(Icons.logout_rounded,
-                    color: SaharaColors.grayText.withValues(alpha: 0.5), size: 18),
+                Tooltip(
+                  message: 'Cerrar Sesión',
+                  child: GestureDetector(
+                    onTap: onLogout,
+                    child: Icon(Icons.logout_rounded,
+                      color: SaharaColors.grayText.withValues(alpha: 0.5),
+                      size: 18),
+                  ),
                 ),
               ],
             ),
@@ -227,7 +505,7 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-// ── Item de sidebar ───────────────────────────────────────────────────────────
+// ── Sidebar item ──────────────────────────────────────────────────────────────
 
 class _SidebarItem extends StatelessWidget {
   final _NavItem item;
@@ -251,10 +529,14 @@ class _SidebarItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
-          color: isSelected ? SaharaColors.gold.withValues(alpha: 0.08) : Colors.transparent,
+          color: isSelected
+              ? SaharaColors.gold.withValues(alpha: 0.08)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? SaharaColors.gold.withValues(alpha: 0.2) : Colors.transparent,
+            color: isSelected
+                ? SaharaColors.gold.withValues(alpha: 0.2)
+                : Colors.transparent,
           ),
         ),
         child: Row(
@@ -262,12 +544,16 @@ class _SidebarItem extends StatelessWidget {
             Icon(
               isSelected ? item.activeIcon : item.icon,
               size: 18,
-              color: isSelected ? SaharaColors.gold : SaharaColors.grayText.withValues(alpha: 0.6),
+              color: isSelected
+                  ? SaharaColors.gold
+                  : SaharaColors.grayText.withValues(alpha: 0.6),
             ),
             const SizedBox(width: 12),
             Text(item.label, style: GoogleFonts.inter(
               fontSize: 13,
-              color: isSelected ? SaharaColors.gold : SaharaColors.grayText.withValues(alpha: 0.6),
+              color: isSelected
+                  ? SaharaColors.gold
+                  : SaharaColors.grayText.withValues(alpha: 0.6),
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             )),
             const Spacer(),
@@ -286,8 +572,7 @@ class _SidebarItem extends StatelessWidget {
               Container(
                 width: 4, height: 4,
                 decoration: const BoxDecoration(
-                  color: SaharaColors.gold, shape: BoxShape.circle,
-                ),
+                  color: SaharaColors.gold, shape: BoxShape.circle),
               ),
           ],
         ),
@@ -295,6 +580,78 @@ class _SidebarItem extends StatelessWidget {
     );
   }
 }
+
+// ── Placeholders ──────────────────────────────────────────────────────────────
+
+class _MensajesPlaceholder extends StatelessWidget {
+  const _MensajesPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Placeholder(
+      icon: Icons.chat_bubble_outline_rounded,
+      title: 'Mensajes',
+      subtitle: 'El chat interno estará disponible próximamente.',
+    );
+  }
+}
+
+class _CajaPlaceholder extends StatelessWidget {
+  const _CajaPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return _Placeholder(
+      icon: Icons.point_of_sale_outlined,
+      title: 'Caja',
+      subtitle: 'El módulo de caja estará disponible próximamente.',
+    );
+  }
+}
+
+class _Placeholder extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _Placeholder({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: SaharaColors.gold.withValues(alpha: 0.07),
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: SaharaColors.gold.withValues(alpha: 0.2)),
+            ),
+            child: Icon(icon, color: SaharaColors.gold, size: 40),
+          ),
+          const SizedBox(height: 20),
+          Text(title, style: GoogleFonts.playfairDisplay(
+            fontSize: 22, color: SaharaColors.whiteSoft,
+            fontWeight: FontWeight.w300, letterSpacing: 1,
+          )),
+          const SizedBox(height: 8),
+          Text(subtitle, style: GoogleFonts.inter(
+            fontSize: 13, color: SaharaColors.grayText,
+          )),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Modelo ────────────────────────────────────────────────────────────────────
 
 class _NavItem {
   final IconData icon;

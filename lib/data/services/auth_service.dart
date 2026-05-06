@@ -157,7 +157,7 @@ class AuthService {
     try {
       await _client
           .from('profiles')
-          .update({'device_token': token})
+          .update({'fcm_token': token})
           .eq('id', currentUser!.id);
     } catch (e) {
       debugPrint('AuthService.saveDeviceToken error: $e');

@@ -86,12 +86,14 @@ class NotificationService {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     try {
+      // Guarda en profiles.fcm_token (columna que leen los triggers de notificación)
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'fcm_token': token})
+          .eq('id', user.id);
+      // También en device_tokens para historial por dispositivo
       await Supabase.instance.client.from('device_tokens').upsert(
-        {
-          'user_id':  user.id,
-          'token':    token,
-          'platform': 'android',
-        },
+        {'user_id': user.id, 'token': token, 'platform': 'android'},
         onConflict: 'user_id, token',
       );
       debugPrint('NotificationService: token guardado');

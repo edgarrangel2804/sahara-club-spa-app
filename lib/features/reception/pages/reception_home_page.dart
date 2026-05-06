@@ -4,12 +4,15 @@ import 'package:intl/intl.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/features/reception/data/models/booking.dart';
 import 'package:sahara_club_spa_app/features/reception/data/reception_repository.dart';
+import 'package:sahara_club_spa_app/features/reception/widgets/assign_booking_dialog.dart';
+import 'package:sahara_club_spa_app/features/reception/widgets/status_badge.dart';
 
 class ReceptionHomePage extends StatefulWidget {
   final ReceptionRepository repo;
   final VoidCallback? onPendingChanged;
+  final ValueNotifier<int>? refreshNotifier;
 
-  const ReceptionHomePage({super.key, required this.repo, this.onPendingChanged});
+  const ReceptionHomePage({super.key, required this.repo, this.onPendingChanged, this.refreshNotifier});
 
   @override
   State<ReceptionHomePage> createState() => _ReceptionHomePageState();
@@ -25,6 +28,13 @@ class _ReceptionHomePageState extends State<ReceptionHomePage> {
   void initState() {
     super.initState();
     _load();
+    widget.refreshNotifier?.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -48,61 +58,85 @@ class _ReceptionHomePageState extends State<ReceptionHomePage> {
     _load();
   }
 
+  void _showAssignDialog(Booking booking) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AssignBookingDialog(
+        booking: booking,
+        repo: widget.repo,
+        onAssigned: () {
+          Navigator.pop(ctx);
+          widget.onPendingChanged?.call();
+          _load();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dateLabel = DateFormat("EEEE d 'de' MMMM", 'es').format(DateTime.now());
     final greeting  = _greeting();
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final pad      = isMobile ? 18.0 : 32.0;
+
     return _loading
         ? const Center(child: CircularProgressIndicator(color: SaharaColors.gold, strokeWidth: 1.5))
         : SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
+            padding: EdgeInsets.all(pad),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Encabezado ───────────────────────────────────────────────
                 Text(greeting, style: GoogleFonts.playfairDisplay(
-                  fontSize: 28, color: SaharaColors.whiteSoft, fontWeight: FontWeight.w300,
+                  fontSize: isMobile ? 22 : 28,
+                  color: SaharaColors.whiteSoft, fontWeight: FontWeight.w300,
                 )),
                 const SizedBox(height: 4),
                 Text(dateLabel, style: GoogleFonts.inter(
                   fontSize: 13, color: SaharaColors.grayText, letterSpacing: 0.5,
                 )),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
                 // ── Solicitudes pendientes ────────────────────────────────────
                 if (_pendingRequests.isNotEmpty) ...[
                   _PendingRequestsSection(
                     bookings: _pendingRequests,
-                    onConfirm: (b) => _changeStatus(b, BookingStatus.confirmed),
-                    onCancel:  (b) => _changeStatus(b, BookingStatus.cancelled),
+                    onAssign: (b) => _showAssignDialog(b),
+                    onCancel: (b) => _changeStatus(b, BookingStatus.cancelled),
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 28),
                 ],
 
                 // ── KPIs ─────────────────────────────────────────────────────
                 LayoutBuilder(builder: (context, c) {
-                  final cols = c.maxWidth > 900 ? 5 : c.maxWidth > 600 ? 3 : 2;
+                  final cols = c.maxWidth > 900 ? 5 : c.maxWidth > 500 ? 3 : 2;
                   return _KpiGrid(stats: _stats, cols: cols);
                 }),
-                const SizedBox(height: 36),
+                const SizedBox(height: 28),
 
                 // ── Agenda de hoy ─────────────────────────────────────────────
                 Row(
                   children: [
-                    Text('AGENDA DE HOY', style: GoogleFonts.inter(
-                      fontSize: 11, color: SaharaColors.gold,
-                      fontWeight: FontWeight.w700, letterSpacing: 2,
-                    )),
+                    Flexible(
+                      child: Text('AGENDA DE HOY', style: GoogleFonts.inter(
+                        fontSize: 11, color: SaharaColors.gold,
+                        fontWeight: FontWeight.w700, letterSpacing: 2,
+                      ), overflow: TextOverflow.ellipsis),
+                    ),
                     const SizedBox(width: 12),
-                    Container(height: 1, width: 40,
-                        color: SaharaColors.gold.withValues(alpha: 0.3)),
+                    Expanded(
+                      child: Container(height: 1, color: SaharaColors.gold.withValues(alpha: 0.3)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
                 if (_todayBookings.isEmpty)
                   _EmptyState(label: 'Sin citas para hoy')
+                else if (isMobile)
+                  _TodayAgendaCards(bookings: _todayBookings, onStatusChange: _changeStatus)
                 else
                   _TodayAgendaTable(bookings: _todayBookings, onStatusChange: _changeStatus),
               ],
@@ -122,12 +156,12 @@ class _ReceptionHomePageState extends State<ReceptionHomePage> {
 
 class _PendingRequestsSection extends StatelessWidget {
   final List<Booking> bookings;
-  final void Function(Booking) onConfirm;
+  final void Function(Booking) onAssign;
   final void Function(Booking) onCancel;
 
   const _PendingRequestsSection({
     required this.bookings,
-    required this.onConfirm,
+    required this.onAssign,
     required this.onCancel,
   });
 
@@ -156,21 +190,29 @@ class _PendingRequestsSection extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 10),
-            Text('SOLICITUDES PENDIENTES', style: GoogleFonts.inter(
-              fontSize: 11, color: const Color(0xFFFFB74D),
-              fontWeight: FontWeight.w700, letterSpacing: 2,
-            )),
-            const SizedBox(width: 12),
-            Container(height: 1, width: 40,
-                color: const Color(0xFFFFB74D).withValues(alpha: 0.3)),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text('SOLICITUDES PENDIENTES', style: GoogleFonts.inter(
+                      fontSize: 11, color: const Color(0xFFFFB74D),
+                      fontWeight: FontWeight.w700, letterSpacing: 2,
+                    ), overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(height: 1, color: const Color(0xFFFFB74D).withValues(alpha: 0.3)),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 14),
         ...bookings.map((b) => _PendingCard(
           booking: b,
-          onConfirm: () => onConfirm(b),
-          onCancel:  () => onCancel(b),
+          onAssign: () => onAssign(b),
+          onCancel: () => onCancel(b),
         )),
       ],
     );
@@ -179,12 +221,12 @@ class _PendingRequestsSection extends StatelessWidget {
 
 class _PendingCard extends StatelessWidget {
   final Booking booking;
-  final VoidCallback onConfirm;
+  final VoidCallback onAssign;
   final VoidCallback onCancel;
 
   const _PendingCard({
     required this.booking,
-    required this.onConfirm,
+    required this.onAssign,
     required this.onCancel,
   });
 
@@ -223,7 +265,8 @@ class _PendingCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(booking.clientName, style: GoogleFonts.inter(
                       fontSize: 14, color: SaharaColors.whiteSoft, fontWeight: FontWeight.w600,
@@ -239,23 +282,38 @@ class _PendingCard extends StatelessWidget {
                   fontSize: 13, color: SaharaColors.grayText,
                 )),
                 const SizedBox(height: 4),
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 4,
                   children: [
-                    const Icon(Icons.calendar_today_rounded, size: 11, color: SaharaColors.gold),
-                    const SizedBox(width: 4),
-                    Text(dateLabel, style: GoogleFonts.inter(fontSize: 12, color: SaharaColors.gold)),
-                    const SizedBox(width: 10),
-                    const Icon(Icons.schedule_rounded, size: 11, color: SaharaColors.gold),
-                    const SizedBox(width: 4),
-                    Text(timeLabel, style: GoogleFonts.inter(fontSize: 12, color: SaharaColors.gold)),
-                    if (booking.therapistName != null) ...[
-                      const SizedBox(width: 10),
-                      const Icon(Icons.person_outline, size: 11, color: SaharaColors.grayText),
-                      const SizedBox(width: 4),
-                      Text(booking.therapistName!, style: GoogleFonts.inter(
-                        fontSize: 12, color: SaharaColors.grayText,
-                      )),
-                    ],
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, size: 11, color: SaharaColors.gold),
+                        const SizedBox(width: 4),
+                        Text(dateLabel, style: GoogleFonts.inter(fontSize: 12, color: SaharaColors.gold)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.schedule_rounded, size: 11, color: SaharaColors.gold),
+                        const SizedBox(width: 4),
+                        Text(timeLabel, style: GoogleFonts.inter(fontSize: 12, color: SaharaColors.gold)),
+                      ],
+                    ),
+                    if (booking.therapistName != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.person_outline, size: 11, color: SaharaColors.grayText),
+                          const SizedBox(width: 4),
+                          Text(booking.therapistName!, style: GoogleFonts.inter(
+                            fontSize: 12, color: SaharaColors.grayText,
+                          )),
+                        ],
+                      ),
                   ],
                 ),
                 if (booking.clientNotes != null && booking.clientNotes!.isNotEmpty) ...[
@@ -280,10 +338,10 @@ class _PendingCard extends StatelessWidget {
           Column(
             children: [
               _ActionBtn(
-                label: 'Confirmar',
-                icon: Icons.check_rounded,
-                color: const Color(0xFF4CAF50),
-                onTap: onConfirm,
+                label: 'Asignar',
+                icon: Icons.person_add_rounded,
+                color: SaharaColors.gold,
+                onTap: onAssign,
               ),
               const SizedBox(height: 8),
               _ActionBtn(
@@ -354,17 +412,21 @@ class _KpiGrid extends StatelessWidget {
       _KpiData('Pendientes',    '${stats['pending'] ?? 0}',   Icons.schedule_rounded,          const Color(0xFFFFB74D)),
       _KpiData('Completadas',   '${stats['completed'] ?? 0}', Icons.done_all_rounded,          const Color(0xFF64B5F6)),
       _KpiData('Ingresos',
-        '\$${NumberFormat('#,###').format((stats['revenue'] as double?) ?? 0)}',
+        '\$${NumberFormat('#,###').format((stats['revenue'] as num?)?.toDouble() ?? 0)}',
         Icons.attach_money_rounded, SaharaColors.goldLight),
     ];
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      children: items.map((d) => SizedBox(
-        width: (MediaQuery.of(context).size.width - 280 - 64 - (cols - 1) * 16) / cols,
-        child: _KpiCard(data: d),
-      )).toList(),
+    return LayoutBuilder(
+      builder: (context, c) {
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: items.map((d) => SizedBox(
+            width: (c.maxWidth - (cols - 1) * 16) / cols,
+            child: _KpiCard(data: d),
+          )).toList(),
+        );
+      }
     );
   }
 }
@@ -496,40 +558,19 @@ class _BookingRow extends StatelessWidget {
             style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText),
             overflow: TextOverflow.ellipsis)),
           Expanded(flex: 2, child: Text(booking.therapistName ?? '—',
-            style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText))),
+            style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText), overflow: TextOverflow.ellipsis)),
           Expanded(flex: 1, child: Text(booking.cabin ?? '—',
-            style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText))),
-          Expanded(flex: 2, child: _StatusBadge(status: booking.status)),
-          Expanded(flex: 1, child: _QuickActions(booking: booking, onStatusChange: onStatusChange)),
+            style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText), overflow: TextOverflow.ellipsis)),
+          Expanded(flex: 2, child: Align(
+            alignment: Alignment.centerLeft,
+            child: StatusBadge(status: booking.status),
+          )),
+          Expanded(flex: 1, child: Align(
+            alignment: Alignment.centerRight,
+            child: _QuickActions(booking: booking, onStatusChange: onStatusChange),
+          )),
         ],
       ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final BookingStatus status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      BookingStatus.confirmed  => const Color(0xFF4CAF50),
-      BookingStatus.completed  => const Color(0xFF64B5F6),
-      BookingStatus.cancelled  => const Color(0xFFEF5350),
-      BookingStatus.noShow     => const Color(0xFFFF7043),
-      BookingStatus.scheduled  => const Color(0xFFFFB74D),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(status.label, style: GoogleFonts.inter(
-        fontSize: 11, color: color, fontWeight: FontWeight.w600,
-      )),
     );
   }
 }
@@ -555,6 +596,60 @@ class _QuickActions extends StatelessWidget {
               ))
           .toList(),
       onSelected: (s) => onStatusChange(booking, s),
+    );
+  }
+}
+
+// ── Tarjetas de agenda para móvil ─────────────────────────────────────────────
+
+class _TodayAgendaCards extends StatelessWidget {
+  final List<Booking> bookings;
+  final void Function(Booking, BookingStatus) onStatusChange;
+  const _TodayAgendaCards({required this.bookings, required this.onStatusChange});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: bookings.map((b) => Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0E0E0E),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF1E1E1E)),
+        ),
+        child: Row(
+          children: [
+            // Hora
+            SizedBox(
+              width: 44,
+              child: Text(b.time.substring(0, 5), style: GoogleFonts.inter(
+                fontSize: 13, color: SaharaColors.gold, fontWeight: FontWeight.w700,
+              )),
+            ),
+            const SizedBox(width: 10),
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(b.clientName, style: GoogleFonts.inter(
+                    fontSize: 14, color: SaharaColors.whiteSoft,
+                    fontWeight: FontWeight.w600,
+                  ), overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(b.serviceName, style: GoogleFonts.inter(
+                    fontSize: 12, color: SaharaColors.grayText,
+                  ), overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            StatusBadge(status: b.status),
+            _QuickActions(booking: b, onStatusChange: onStatusChange),
+          ],
+        ),
+      )).toList(),
     );
   }
 }
