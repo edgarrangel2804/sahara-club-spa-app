@@ -37,18 +37,49 @@ serve(async (req) => {
     }
 
     const accessToken = await getAccessToken(SA_JSON);
-    const ok = await sendFcm(accessToken, token, title, body, data ?? {});
+    const { ok } = await sendFcm(accessToken, token, title, body, data ?? {});
 
     if (ok) {
-      await supabase.from('notifications').insert({
-        user_id,
-        title,
-        body,
-        data: data ?? {},
-      }).catch(() => {});
+      try {
+        await supabase.from('notifications').insert({ user_id, title, body, data: data ?? {} });
+      } catch {}
+      return new Response(JSON.stringify({ sent: 1 }), { status: 200 });
     }
 
-    return new Response(JSON.stringify({ sent: ok ? 1 : 0 }), { status: 200 });
+    // FCM rechazó el token (UNREGISTERED). saveTokenForCurrentUser() tarda ~2-3 s en guardar
+    // el token nuevo (Firebase getToken + escritura a Supabase). Esperamos 4 s antes del re-fetch
+    // para darle tiempo al app de actualizar el token en la DB.
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    const { data: freshProfile } = await supabase
+      .from('profiles')
+      .select('fcm_token')
+      .eq('id', user_id)
+      .maybeSingle();
+
+    const freshToken = freshProfile?.fcm_token as string | null;
+
+    if (freshToken && freshToken !== token) {
+      const { ok: retryOk } = await sendFcm(accessToken, freshToken, title, body, data ?? {});
+      if (retryOk) {
+        try {
+          await supabase.from('notifications').insert({ user_id, title, body, data: data ?? {} });
+        } catch {}
+        return new Response(JSON.stringify({ sent: 1, retried: true }), { status: 200 });
+      }
+      // El token nuevo también falló — limpiar solo ese token
+      try {
+        await supabase.from('profiles').update({ fcm_token: null }).eq('id', user_id).eq('fcm_token', freshToken);
+      } catch {}
+    } else {
+      // Token sigue siendo el mismo obsoleto — limpiar condicionalmente para no sobreescribir un token
+      // que el app pudiera haber guardado justo entre nuestra lectura y ahora
+      try {
+        await supabase.from('profiles').update({ fcm_token: null }).eq('id', user_id).eq('fcm_token', token);
+      } catch {}
+    }
+
+    return new Response(JSON.stringify({ sent: 0 }), { status: 200 });
 
   } catch (e) {
     console.error('send-push-notification error:', e);
@@ -62,8 +93,14 @@ async function sendFcm(
   title: string,
   body: string,
   data: Record<string, string>,
-): Promise<boolean> {
+): Promise<{ ok: boolean }> {
   try {
+    // El canal siempre es reminders (alerta_push) para push de background y foreground-no-en-chat.
+    // Cuando el usuario YA está en el chat, Flutter elige sahara_chat_v3 desde el listener local.
+    const channelId = 'sahara_reminders_v3';
+    const sound     = 'alerta_push';
+    const iosSound  = 'alerta_push.mp3';
+
     const res = await fetch(
       `https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`,
       {
@@ -81,14 +118,14 @@ async function sendFcm(
             ),
             android: {
               notification: {
-                sound:      'alerta_push',
-                channel_id: 'sahara_alerts',
-                priority:   'high',
+                sound,
+                channel_id: channelId,
+                notification_priority: 'PRIORITY_HIGH',
               },
-              priority: 'high',
+              priority: 'HIGH',
             },
             apns: {
-              payload: { aps: { sound: 'alerta_push.mp3', badge: 1 } },
+              payload: { aps: { sound: iosSound, badge: 1 } },
               headers: { 'apns-priority': '10' },
             },
           },
@@ -96,10 +133,10 @@ async function sendFcm(
       },
     );
     if (!res.ok) console.error('FCM error:', await res.text());
-    return res.ok;
+    return { ok: res.ok };
   } catch (e) {
     console.error('sendFcm error:', e);
-    return false;
+    return { ok: false };
   }
 }
 

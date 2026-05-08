@@ -7,7 +7,12 @@ import 'package:firebase_core/firebase_core.dart';
 // Manejador de mensajes en background — debe ser top-level
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await NotificationService._showLocalNotification(message);
+  await Firebase.initializeApp();
+  // Evitar duplicados: Si trae bloque notification, Android lo muestra automáticamente.
+  // Solo mostramos notificación local manual si es un mensaje de tipo 'data-only'.
+  if (message.notification == null) {
+    await NotificationService._showLocalNotification(message);
+  }
 }
 
 class NotificationService {
@@ -20,10 +25,24 @@ class NotificationService {
     return FirebaseMessaging.instance;
   }
 
+  // ── Notificaciones visuales (UI) ──────────────────────────────────────────
+  final unreadChatNotifier = ValueNotifier<bool>(false);
+
+  void markChatAsRead() {
+    unreadChatNotifier.value = false;
+  }
+
+  // ID del chat que el usuario está viendo actualmente.
+  // Se actualiza desde las páginas de chat al abrirse y cerrarse.
+  String? _activeChatId;
+
+  void enterChat(String chatId) => _activeChatId = chatId;
+  void leaveChat() => _activeChatId = null;
+
   // ── Canales Android ───────────────────────────────────────────────────────
 
-  static const _channelReminders = AndroidNotificationChannel(
-    'sahara_reminders',
+  static const _chReminders = AndroidNotificationChannel(
+    'sahara_reminders_v3',
     'Recordatorios de cita',
     description: 'Avisos de tu próxima cita en Sahara Club Spa',
     importance: Importance.high,
@@ -31,27 +50,21 @@ class NotificationService {
     enableVibration: true,
   );
 
-  static const _channelChat = AndroidNotificationChannel(
-    'sahara_chat',
-    'Mensajes',
-    description: 'Mensajes y avisos generales de Sahara',
-    importance: Importance.defaultImportance,
+  static const _chChat = AndroidNotificationChannel(
+    'sahara_chat_v3',
+    'Mensajes internos',
+    description: 'Mensajes del equipo Sahara Club Spa',
+    importance: Importance.high,
     sound: RawResourceAndroidNotificationSound('chat_push'),
+    enableVibration: true,
   );
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
   Future<void> init() async {
-    // Permisos
     await _fcm?.requestPermission(alert: true, badge: true, sound: true);
 
-    // Crear canales Android
-    final androidPlugin = _local
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(_channelReminders);
-    await androidPlugin?.createNotificationChannel(_channelChat);
-
-    // Init local notifications
+    // initialize() primero — necesario antes de crear canales
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(
@@ -62,10 +75,23 @@ class NotificationService {
     );
     await _local.initialize(settings);
 
-    // Token inicial
-    await _fetchAndSaveToken();
+    // Limpiar canales viejos y crear v3 con los sonidos correctos.
+    // Android cachea la configuración de canal; usar un ID nuevo garantiza
+    // que el sonido se aplica sin importar el historial del dispositivo.
+    final androidPlugin = _local
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    for (final id in [
+      'sahara_reminders',
+      'sahara_chat',
+      'sahara_reminders_v2',
+      'sahara_chat_v2',
+    ]) {
+      await androidPlugin?.deleteNotificationChannel(id);
+    }
+    await androidPlugin?.createNotificationChannel(_chReminders);
+    await androidPlugin?.createNotificationChannel(_chChat);
 
-    // Refrescar token cuando cambie
+    await _fetchAndSaveToken();
     _fcm?.onTokenRefresh.listen(_saveToken);
 
     debugPrint('NotificationService: inicializado');
@@ -86,12 +112,10 @@ class NotificationService {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     try {
-      // Guarda en profiles.fcm_token (columna que leen los triggers de notificación)
       await Supabase.instance.client
           .from('profiles')
           .update({'fcm_token': token})
           .eq('id', user.id);
-      // También en device_tokens para historial por dispositivo
       await Supabase.instance.client.from('device_tokens').upsert(
         {'user_id': user.id, 'token': token, 'platform': 'android'},
         onConflict: 'user_id, token',
@@ -102,49 +126,70 @@ class NotificationService {
     }
   }
 
-  // Llamado desde AuthService cuando el usuario inicia sesión
-  Future<void> saveTokenForCurrentUser() => _fetchAndSaveToken();
+  // Llamado desde AuthService cuando el usuario inicia sesión.
+  Future<void> saveTokenForCurrentUser() async {
+    // No llamamos deleteToken() — FCM invalida el token viejo automáticamente al reinstalar
+    // y llamarlo solo alarga la ventana en que la DB tiene un token obsoleto.
+    await _fetchAndSaveToken();
+  }
 
   // ── Listeners ─────────────────────────────────────────────────────────────
 
-  // Mensajes cuando la app está en primer plano
   void startInAppNotificationListener() {
     if (Firebase.apps.isEmpty) return;
     FirebaseMessaging.onMessage.listen((msg) {
       debugPrint('Notificación en foreground: ${msg.notification?.title}');
-      _showLocalNotification(msg);
+      final type   = msg.data['type']    as String? ?? 'reminder';
+      final chatId = msg.data['chat_id'] as String?;
+
+      if (type == 'chat' || type == 'custom') {
+        unreadChatNotifier.value = true;
+      }
+
+      // Si el usuario ya está viendo ese chat, usar sonido de chat; si no, alerta.
+      final inActiveChat = type == 'chat' && chatId != null && chatId == _activeChatId;
+      _showLocalNotification(msg, inActiveChat: inActiveChat);
     });
   }
 
-  // Tap en notificación de reserva (app en background o cerrada)
   void startBookingNotificationListener() {
     if (Firebase.apps.isEmpty) return;
     FirebaseMessaging.onMessageOpenedApp.listen((msg) {
       debugPrint('Notificación de reserva abierta: ${msg.data}');
-      // La navegación se maneja desde main.dart con el navigatorKey
     });
   }
 
-  // Mensajes personalizados (admin broadcast)
   void startCustomNotificationListener() {
     // Extendible para mensajes de tipo 'custom' del admin
   }
 
   // ── Mostrar notificación local ─────────────────────────────────────────────
 
-  static Future<void> _showLocalNotification(RemoteMessage message) async {
+  static Future<void> _showLocalNotification(
+    RemoteMessage message, {
+    bool inActiveChat = false,
+  }) async {
     final n = message.notification;
     if (n == null) return;
 
-    final type = message.data['type'] as String? ?? 'reminder';
-    final isChat = type == 'chat' || type == 'custom';
+    final plugin = FlutterLocalNotificationsPlugin();
+    await plugin.initialize(const InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      ),
+    ));
 
+    // inActiveChat = true  → ambos en el chat, sonido sutil de chat
+    // inActiveChat = false → mensaje nuevo, reserva, o cualquier alerta → alerta_push
     final androidDetails = AndroidNotificationDetails(
-      isChat ? 'sahara_chat' : 'sahara_reminders',
-      isChat ? 'Mensajes' : 'Recordatorios de cita',
-      importance: isChat ? Importance.defaultImportance : Importance.high,
+      inActiveChat ? 'sahara_chat_v3' : 'sahara_reminders_v3',
+      inActiveChat ? 'Mensajes' : 'Recordatorios de cita',
+      importance: Importance.high,
       priority: Priority.high,
-      sound: isChat
+      sound: inActiveChat
           ? const RawResourceAndroidNotificationSound('chat_push')
           : const RawResourceAndroidNotificationSound('alerta_push'),
       icon: '@mipmap/ic_launcher',
@@ -156,7 +201,6 @@ class NotificationService {
       presentSound: true,
     );
 
-    final plugin = FlutterLocalNotificationsPlugin();
     await plugin.show(
       n.hashCode,
       n.title,

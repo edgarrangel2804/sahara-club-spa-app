@@ -1,7 +1,8 @@
 // Edge Function — notify-booking-event
-// Maneja 2 tipos de notificaciones:
-//   new_booking       → push a todas las recepcionistas activas
-//   booking_confirmed → push al cliente cuya cita fue confirmada
+// Maneja 3 tipos de notificaciones:
+//   new_booking        → push a todas las recepcionistas activas
+//   booking_confirmed  → push al cliente cuya cita fue confirmada
+//   therapist_assigned → push al terapeuta asignado a la cita
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -16,7 +17,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 serve(async (req) => {
   try {
     const { type, booking_id } = await req.json() as {
-      type: 'new_booking' | 'booking_confirmed';
+      type: 'new_booking' | 'booking_confirmed' | 'therapist_assigned';
       booking_id: string;
     };
 
@@ -31,7 +32,7 @@ serve(async (req) => {
         id, booking_date, booking_time,
         services(name),
         client:profiles!bookings_client_id_fkey(id, full_name, fcm_token),
-        therapist:profiles!bookings_therapist_id_fkey(full_name)
+        therapist:profiles!bookings_therapist_id_fkey(id, full_name, fcm_token)
       `)
       .eq('id', booking_id)
       .single();
@@ -102,6 +103,29 @@ serve(async (req) => {
         sent++;
         await logNotification(client.id, booking_id, type, title, body);
       }
+    }
+
+    // ── CASO 3: terapeuta asignado → notificar al terapeuta ──────────────────
+    else if (type === 'therapist_assigned') {
+      const therapist = booking.therapist as any;
+      if (!therapist?.fcm_token) {
+        return new Response(
+          JSON.stringify({ sent: 0, message: 'Terapeuta sin token FCM registrado' }),
+          { status: 200 },
+        );
+      }
+
+      const title = '📋 Nueva cita asignada — Sahara Club Spa';
+      const body  = `${clientName} · ${serviceName} · ${dateLabel} a las ${timeLabel}`;
+
+      const ok = await sendFcm(accessToken, therapist.fcm_token, title, body, {
+        type: 'therapist_assigned',
+        booking_id,
+      });
+      if (ok) {
+        sent++;
+        await logNotification(therapist.id, booking_id, type, title, body);
+      }
     } else {
       return new Response(JSON.stringify({ error: 'type inválido' }), { status: 400 });
     }
@@ -155,11 +179,11 @@ async function sendFcm(
             data,
             android: {
               notification: {
-                sound:      'alerta_push',
-                channel_id: 'sahara_alerts',
-                priority:   'high',
+                sound:                'alerta_push',
+                channel_id:           'sahara_reminders_v3',
+                notification_priority: 'PRIORITY_HIGH',
               },
-              priority: 'high',
+              priority: 'HIGH',
             },
             apns: {
               payload: { aps: { sound: 'alerta_push.mp3', badge: 1 } },

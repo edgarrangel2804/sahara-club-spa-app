@@ -346,6 +346,116 @@ class ReceptionRepository {
     return data['client'] as Map<String, dynamic>;
   }
 
+  // ── Caja ─────────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getCajaData(DateTime date) async {
+    try {
+      final raw = await _db
+          .from('bookings')
+          .select('''
+            id, price, booking_time, service_name,
+            clients:profiles!bookings_client_id_fkey(full_name),
+            services(name),
+            payments(payment_method, amount)
+          ''')
+          .eq('booking_date', _dateStr(date))
+          .eq('status', 'completed')
+          .order('booking_time');
+      return (raw as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('ReceptionRepository.getCajaData error: $e');
+      return [];
+    }
+  }
+
+  // ── Gastos ────────────────────────────────────────────────────────────────
+
+  Future<void> addExpense({
+    required double amount,
+    required String category,
+    required String description,
+    required DateTime date,
+  }) async {
+    final userId = _db.auth.currentUser?.id;
+    if (userId == null) throw Exception('Usuario no autenticado');
+    await _db.from('expenses').insert({
+      'amount':       amount,
+      'category':     category,
+      'description':  description,
+      'expense_date': _dateStr(date),
+      'created_by':   userId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getExpenses(DateTime date) async {
+    try {
+      final raw = await _db
+          .from('expenses')
+          .select('id, amount, category, description, created_at')
+          .eq('expense_date', _dateStr(date))
+          .order('created_at');
+      return (raw as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('ReceptionRepository.getExpenses error: $e');
+      return [];
+    }
+  }
+
+  // ── Chat interno ──────────────────────────────────────────────────────────
+
+  String get myId => _db.auth.currentUser!.id;
+
+  Future<List<Map<String, dynamic>>> getStaffContacts() async {
+    try {
+      final raw = await _db
+          .from('profiles')
+          .select('id, full_name, role, specialty, avatar_url')
+          .inFilter('role', ['admin', 'therapist'])
+          .eq('is_active', true)
+          .order('role')
+          .order('full_name');
+      return (raw as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('ReceptionRepository.getStaffContacts: $e');
+      return [];
+    }
+  }
+
+  Future<String> getOrCreateChat(String otherUserId) async {
+    final me = myId;
+    final existing = await _db
+        .from('chats')
+        .select('id')
+        .or('and(participant_1.eq.$me,participant_2.eq.$otherUserId),'
+            'and(participant_1.eq.$otherUserId,participant_2.eq.$me)')
+        .maybeSingle();
+    if (existing != null) return existing['id'] as String;
+    final created = await _db
+        .from('chats')
+        .insert({'participant_1': me, 'participant_2': otherUserId})
+        .select('id')
+        .single();
+    return created['id'] as String;
+  }
+
+  Stream<List<Map<String, dynamic>>> streamMessages(String chatId, {int limit = 10}) {
+    return _db
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('chat_id', chatId)
+        .order('created_at', ascending: false)
+        .limit(limit)
+        .map((list) => list.cast<Map<String, dynamic>>());
+  }
+
+  Future<void> sendMessage(String chatId, String content) async {
+    await _db.from('messages').insert({
+      'chat_id':   chatId,
+      'sender_id': myId,
+      'content':   content,
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   String _today() => _dateStr(DateTime.now());

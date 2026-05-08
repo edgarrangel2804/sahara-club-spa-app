@@ -3,8 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
+import 'package:sahara_club_spa_app/data/services/notification_service.dart';
 import 'package:sahara_club_spa_app/features/therapist/data/therapist_repository.dart';
 import 'package:sahara_club_spa_app/features/therapist/pages/therapist_home_page.dart';
+import 'package:sahara_club_spa_app/features/therapist/pages/therapist_clients_page.dart';
+import 'package:sahara_club_spa_app/features/therapist/pages/therapist_messages_page.dart';
 
 class TherapistShell extends StatefulWidget {
   const TherapistShell({super.key});
@@ -58,16 +61,8 @@ class _TherapistShellState extends State<TherapistShell> {
         specialty: _specialty,
         avatarUrl: _avatarUrl,
       ),
-      const _PlaceholderTab(
-        icon:  Icons.people_outline_rounded,
-        label: 'Clientes',
-        hint:  'Aquí verás el historial de tus clientes.',
-      ),
-      const _PlaceholderTab(
-        icon:  Icons.chat_bubble_outline_rounded,
-        label: 'Mensajes',
-        hint:  'El chat interno estará disponible próximamente.',
-      ),
+      TherapistClientsPage(repo: _repo),
+      TherapistMessagesPage(repo: _repo),
       _ProfileTab(
         name:      _name,
         specialty: _specialty,
@@ -103,9 +98,18 @@ class _TherapistShellState extends State<TherapistShell> {
         ),
         child: IndexedStack(index: _index, children: pages),
       ),
-      bottomNavigationBar: _TherapistBottomNav(
-        currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
+      bottomNavigationBar: ValueListenableBuilder<bool>(
+        valueListenable: NotificationService.instance.unreadChatNotifier,
+        builder: (context, hasUnreadChat, child) {
+          return _TherapistBottomNav(
+            currentIndex: _index,
+            hasUnreadChat: hasUnreadChat,
+            onTap: (i) {
+              if (i == 2) NotificationService.instance.markChatAsRead(); // index 2 is Mensajes
+              setState(() => _index = i);
+            },
+          );
+        },
       ),
     );
   }
@@ -115,10 +119,12 @@ class _TherapistShellState extends State<TherapistShell> {
 
 class _TherapistBottomNav extends StatelessWidget {
   final int currentIndex;
+  final bool hasUnreadChat;
   final ValueChanged<int> onTap;
 
   const _TherapistBottomNav({
     required this.currentIndex,
+    this.hasUnreadChat = false,
     required this.onTap,
   });
 
@@ -145,6 +151,7 @@ class _TherapistBottomNav extends StatelessWidget {
             children: List.generate(_items.length, (i) {
               final item       = _items[i];
               final isSelected = i == currentIndex;
+              final isChatAlert = item.label == 'Mensajes' && hasUnreadChat;
 
               return Expanded(
                 child: GestureDetector(
@@ -156,12 +163,28 @@ class _TherapistBottomNav extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          isSelected ? item.activeIcon : item.icon,
-                          size: 22,
-                          color: isSelected
-                              ? SaharaColors.gold
-                              : SaharaColors.grayText.withValues(alpha: 0.5),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(
+                              isSelected ? item.activeIcon : item.icon,
+                              size: 22,
+                              color: isSelected
+                                  ? SaharaColors.gold
+                                  : SaharaColors.grayText.withValues(alpha: 0.5),
+                            ),
+                            if (isChatAlert)
+                              Positioned(
+                                top: -2, right: -4,
+                                child: Container(
+                                  width: 8, height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.redAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(item.label, style: GoogleFonts.inter(
@@ -200,45 +223,6 @@ class _NavItem {
   final IconData activeIcon;
   final String label;
   const _NavItem(this.icon, this.activeIcon, this.label);
-}
-
-// ── Placeholder tab ───────────────────────────────────────────────────────────
-
-class _PlaceholderTab extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String hint;
-  const _PlaceholderTab({
-    required this.icon, required this.label, required this.hint});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: SaharaColors.gold.withValues(alpha: 0.07),
-              shape: BoxShape.circle,
-              border: Border.all(color: SaharaColors.gold.withValues(alpha: 0.18)),
-            ),
-            child: Icon(icon, color: SaharaColors.gold, size: 38),
-          ),
-          const SizedBox(height: 20),
-          Text(label, style: GoogleFonts.playfairDisplay(
-            fontSize: 22, color: SaharaColors.whiteSoft,
-            fontWeight: FontWeight.w300, letterSpacing: 1,
-          )),
-          const SizedBox(height: 8),
-          Text(hint, style: GoogleFonts.inter(
-            fontSize: 13, color: SaharaColors.grayText,
-          )),
-        ],
-      ),
-    );
-  }
 }
 
 // ── Profile tab ───────────────────────────────────────────────────────────────

@@ -5,6 +5,8 @@ import 'package:sahara_club_spa_app/core/locale_cubit.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 
+final saharaNavigatorKey = GlobalKey<NavigatorState>();
+
 class SaharaApp extends StatelessWidget {
   const SaharaApp({super.key});
 
@@ -15,6 +17,7 @@ class SaharaApp extends StatelessWidget {
         return MaterialApp(
           title: 'Sahara Club',
           debugShowCheckedModeBanner: false,
+          navigatorKey: saharaNavigatorKey,
           theme: SaharaTheme.theme,
           locale: locale,
           supportedLocales: const [Locale('es'), Locale('en')],

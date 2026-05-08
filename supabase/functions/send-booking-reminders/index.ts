@@ -136,12 +136,15 @@ async function sendFcmV1(
             data,
             android: {
               notification: {
-                sound:      'alerta_push',
-                channel_id: 'sahara_reminders',
+                sound:                'alerta_push',
+                channel_id:           'sahara_reminders_v3',
+                notification_priority: 'PRIORITY_HIGH',
               },
+              priority: 'HIGH',
             },
             apns: {
-              payload: { aps: { sound: 'alerta_push.mp3' } },
+              payload: { aps: { sound: 'alerta_push.mp3', badge: 1 } },
+              headers: { 'apns-priority': '10' },
             },
           },
         }),

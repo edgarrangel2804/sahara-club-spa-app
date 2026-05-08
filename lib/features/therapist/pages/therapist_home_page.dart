@@ -403,161 +403,135 @@ class _TimelineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeLabel = booking.time.substring(0, 5);
-    final hasNotes  = booking.clientNotes?.isNotEmpty == true;
+    final timeLabel = booking.time.length >= 5
+        ? booking.time.substring(0, 5)
+        : booking.time;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Columna de hora + punto ──────────────────────────────────────
-        SizedBox(
-          width: 52,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 14),
-                child: Text(timeLabel, style: GoogleFonts.inter(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Hora ─────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(top: 14, right: 14),
+            child: SizedBox(
+              width: 46,
+              child: Text(
+                timeLabel,
+                textAlign: TextAlign.right,
+                style: GoogleFonts.inter(
                   fontSize: 13, color: SaharaColors.gold,
                   fontWeight: FontWeight.w700, letterSpacing: 0.5,
-                )),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _accentColor,
-                  boxShadow: [BoxShadow(
-                    color: _accentColor.withValues(alpha: 0.4),
-                    blurRadius: 6,
-                  )],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(width: 14),
 
-        // ── Tarjeta de cita ──────────────────────────────────────────────
-        Expanded(
-          child: GestureDetector(
-            onTap: onTap,
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111111),
-                borderRadius: BorderRadius.circular(16),
-                border: Border(
-                  left:   BorderSide(color: _accentColor, width: 3),
-                  top:    BorderSide(color: _accentColor.withValues(alpha: 0.12)),
-                  right:  BorderSide(color: _accentColor.withValues(alpha: 0.12)),
-                  bottom: BorderSide(color: _accentColor.withValues(alpha: 0.12)),
-                ),
-              ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Servicio + estado
-                      Row(
+          // ── Tarjeta ───────────────────────────────────────────────────
+          Expanded(
+            child: GestureDetector(
+              onTap: onTap,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Stack(
+                  children: [
+                    // Fondo oscuro
+                    const Positioned.fill(
+                      child: ColoredBox(color: Color(0xFF141414)),
+                    ),
+                    // Borde izquierdo de acento
+                    Positioned(
+                      left: 0, top: 0, bottom: 0,
+                      child: Container(width: 3, color: _accentColor),
+                    ),
+                    // Contenido
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(17, 12, 14, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(booking.serviceName,
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 16, color: SaharaColors.whiteSoft,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            booking.serviceName,
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 16, color: SaharaColors.gold,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          StatusBadge(status: booking.status),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Cliente + notas
-                      Row(
-                        children: [
-                          const Icon(Icons.person_rounded, size: 12,
-                              color: SaharaColors.grayText),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(booking.clientName,
-                              style: GoogleFonts.inter(
-                                fontSize: 13, color: SaharaColors.whiteSoft,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (hasNotes)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 6),
-                              child: Tooltip(
-                                message: 'Tiene notas',
-                                child: Icon(Icons.sticky_note_2_outlined,
-                                    size: 14,
-                                    color: SaharaColors.gold.withValues(alpha: 0.7)),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Duración + acción rápida
-                      Row(
-                        children: [
-                          Icon(Icons.timer_outlined, size: 11,
-                              color: SaharaColors.grayText.withValues(alpha: 0.6)),
-                          const SizedBox(width: 4),
-                          Text('${booking.durationMin} min',
+                          const SizedBox(height: 6),
+                          Text(
+                            booking.clientName,
                             style: GoogleFonts.inter(
-                              fontSize: 11, color: SaharaColors.grayText,
-                            )),
-                          if (booking.price > 0) ...[
-                            Text('  ·  ', style: GoogleFonts.inter(
-                                fontSize: 11, color: SaharaColors.grayText)),
-                            Text('\$${NumberFormat('#,###').format(booking.price)}',
-                              style: GoogleFonts.inter(
-                                fontSize: 11, color: SaharaColors.gold,
-                              )),
-                          ],
-                          const Spacer(),
-                          if (_canComplete)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: const Color(0xFF4CAF50)
-                                        .withValues(alpha: 0.3)),
+                              fontSize: 14, color: SaharaColors.whiteSoft,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              StatusBadge(status: booking.status),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${booking.durationMin} min',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12, color: SaharaColors.grayText,
+                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.check_rounded,
-                                      size: 11, color: Color(0xFF4CAF50)),
-                                  const SizedBox(width: 4),
-                                  Text('Completar', style: GoogleFonts.inter(
-                                    fontSize: 10, color: const Color(0xFF4CAF50),
-                                    fontWeight: FontWeight.w600,
-                                  )),
-                                ],
+                              if (booking.price > 0) ...[
+                                Text('  ·  ', style: GoogleFonts.inter(
+                                    fontSize: 12, color: SaharaColors.grayText)),
+                                Text(
+                                  '\$${NumberFormat('#,###').format(booking.price)}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12, color: SaharaColors.gold,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (_canComplete) ...[
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4CAF50)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color: const Color(0xFF4CAF50)
+                                          .withValues(alpha: 0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.check_rounded,
+                                        size: 12, color: Color(0xFF4CAF50)),
+                                    const SizedBox(width: 4),
+                                    Text('Completar', style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: const Color(0xFF4CAF50),
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                                  ],
+                                ),
                               ),
                             ),
+                          ],
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ],
+      ),
     );
   }
 }

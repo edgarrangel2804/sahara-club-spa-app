@@ -17,6 +17,8 @@ import 'package:sahara_club_spa_app/features/admin/pages/agenda_page.dart';
 import 'package:sahara_club_spa_app/features/admin/pages/clientes_page.dart';
 import 'package:sahara_club_spa_app/features/admin/pages/finances_page.dart';
 import 'package:sahara_club_spa_app/features/admin/pages/admin_config_screen.dart';
+import 'package:sahara_club_spa_app/features/admin/pages/terapeutas_page.dart';
+import 'package:sahara_club_spa_app/features/admin/pages/admin_messages_page.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   const AdminDashboardPage({super.key});
@@ -92,6 +94,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       const AdminAgendaPage(),
       const AdminClientesPage(),
       const AdminFinancesPage(),
+      AdminMessagesPage(repo: _repo),
       const AdminConfigScreen(),
     ];
 
@@ -126,7 +129,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                     )
                   else
                     Text(
-                      ['', 'Agenda', 'Usuarios', 'Finanzas', 'Configuración'][_selectedIndex],
+                      ['', 'Agenda', 'Usuarios', 'Finanzas', 'Mensajes', 'Configuración'][_selectedIndex],
                       style: GoogleFonts.playfairDisplay(
                         fontSize: 18,
                         color: SaharaColors.gold,
@@ -168,7 +171,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               _navItem(1, Icons.calendar_today_outlined, Icons.calendar_today_rounded, 'Agenda'),
               _navItem(2, Icons.people_outline_rounded, Icons.people_rounded, 'Usuarios'),
               _navItem(3, Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Finanzas'),
-              _navItem(4, Icons.settings_outlined, Icons.settings_rounded, 'Config'),
+              _navItem(4, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Mensajes'),
+              _navItem(5, Icons.settings_outlined, Icons.settings_rounded, 'Config'),
             ],
           ),
         ),
@@ -281,7 +285,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             const SizedBox(height: 20),
 
             // Terapeutas
-            TerapeutasWidget(terapeutas: _terapeutas),
+            GestureDetector(
+              onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminTerapeutasPage())),
+              child: TerapeutasWidget(terapeutas: _terapeutas),
+            ),
             const SizedBox(height: 20),
 
             // Clientes
@@ -316,10 +324,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       physics: const BouncingScrollPhysics(),
       child: Row(
         children: [
-          _navCard('Servicios', Icons.spa_outlined, SaharaColors.gold, () {}),
+          _navCard('Terapeutas', Icons.self_improvement_rounded, SaharaColors.gold,
+              () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminTerapeutasPage()))),
           _navCard('Agenda', Icons.calendar_today_outlined, const Color(0xFF8B5CF6),
               () => setState(() => _selectedIndex = 1)),
-          _navCard('Reportes', Icons.bar_chart_rounded, const Color(0xFF10B981),
+          _navCard('Finanzas', Icons.bar_chart_rounded, const Color(0xFF10B981),
               () => setState(() => _selectedIndex = 3)),
         ],
       ),

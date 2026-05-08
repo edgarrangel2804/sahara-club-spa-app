@@ -603,37 +603,120 @@ class _ReceptionAgendaPageState extends State<ReceptionAgendaPage> {
   // ── Receipt modal ─────────────────────────────────────────────────────────
 
   void _showReceiptModal(Booking booking, String method) {
+    final methodLabel = _payLabel(method);
     showDialog(context: context, builder: (ctx) {
       return Dialog(
         backgroundColor: const Color(0xFF111111),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
-          padding: const EdgeInsets.all(40),
+          padding: const EdgeInsets.fromLTRB(28, 36, 28, 28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_outline, color: SaharaColors.gold, size: 64),
-              const SizedBox(height: 24),
+              // Checkmark circle
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: SaharaColors.gold.withValues(alpha: 0.1),
+                  border: Border.all(color: SaharaColors.gold.withValues(alpha: 0.3)),
+                ),
+                child: const Icon(Icons.check_rounded, color: SaharaColors.gold, size: 30),
+              ),
+              const SizedBox(height: 18),
               Text('Pago Exitoso', style: GoogleFonts.playfairDisplay(
-                  fontSize: 28, color: Colors.white)),
-              const SizedBox(height: 12),
-              Text(booking.serviceName, style: GoogleFonts.inter(
-                  fontSize: 17, color: SaharaColors.gold)),
-              const SizedBox(height: 4),
-              Text('\$${NumberFormat('#,###').format(booking.price)}',
-                style: GoogleFonts.inter(fontSize: 32, color: Colors.white,
-                    fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text('Pagado con ${method.toUpperCase()}', style: GoogleFonts.inter(
-                  fontSize: 12, color: Colors.white54)),
-              const SizedBox(height: 28),
-              Text('"This was your moment"', style: GoogleFonts.playfairDisplay(
-                fontStyle: FontStyle.italic, color: SaharaColors.grayText, fontSize: 15,
-              )),
-              const SizedBox(height: 28),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cerrar', style: TextStyle(color: SaharaColors.gold)),
+                  fontSize: 26, color: Colors.white)),
+              const SizedBox(height: 22),
+
+              // Ticket body
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0D0D),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: SaharaColors.gold.withValues(alpha: 0.12)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _receiptRow(Icons.spa_rounded, booking.serviceName, SaharaColors.gold),
+                    const SizedBox(height: 10),
+                    _receiptRow(Icons.person_rounded, booking.clientName, Colors.white60),
+                    if (booking.therapistName != null) ...[
+                      const SizedBox(height: 10),
+                      _receiptRow(Icons.self_improvement_rounded,
+                          booking.therapistName!, Colors.white38),
+                    ],
+                    const SizedBox(height: 10),
+                    _receiptRow(
+                      Icons.access_time_rounded,
+                      '${booking.time.substring(0, 5)}  ·  '
+                          '${DateFormat("d 'de' MMM", 'es').format(booking.date)}',
+                      Colors.white38,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(height: 0.5, color: SaharaColors.gold.withValues(alpha: 0.15)),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('TOTAL', style: GoogleFonts.inter(
+                          fontSize: 10, color: Colors.white38, letterSpacing: 2,
+                        )),
+                        Row(
+                          children: [
+                            Text(
+                              '\$${NumberFormat('#,###').format(booking.price)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 22, color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: SaharaColors.gold.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: SaharaColors.gold.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(methodLabel, style: GoogleFonts.inter(
+                                fontSize: 10, color: SaharaColors.gold,
+                                fontWeight: FontWeight.w600,
+                              )),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text('"Tu cuerpo recuerda cómo descansar."',
+                style: GoogleFonts.playfairDisplay(
+                  fontStyle: FontStyle.italic,
+                  color: SaharaColors.grayText,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF2A2A2A)),
+                  ),
+                  child: Center(child: Text('Cerrar', style: GoogleFonts.inter(
+                    color: Colors.white54, fontSize: 14,
+                  ))),
+                ),
               ),
             ],
           ),
@@ -641,6 +724,25 @@ class _ReceptionAgendaPageState extends State<ReceptionAgendaPage> {
       );
     });
   }
+
+  Widget _receiptRow(IconData icon, String text, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: GoogleFonts.inter(
+          fontSize: 13, color: color, fontWeight: FontWeight.w400,
+        ))),
+      ],
+    );
+  }
+
+  String _payLabel(String method) => switch (method) {
+    'cash'   => 'Efectivo',
+    'debit'  => 'Débito',
+    'credit' => 'Crédito',
+    _        => method,
+  };
 
   // ── Reschedule modal ──────────────────────────────────────────────────────
 

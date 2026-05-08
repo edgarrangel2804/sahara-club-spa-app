@@ -3,6 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
+import 'package:sahara_club_spa_app/features/admin/pages/permisos_page.dart';
+import 'package:sahara_club_spa_app/features/admin/pages/servicios_page.dart';
+import 'package:sahara_club_spa_app/features/admin/pages/equipo_page.dart';
 
 class AdminConfigScreen extends StatelessWidget {
   const AdminConfigScreen({super.key});
@@ -31,9 +34,13 @@ class AdminConfigScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 16),
           _section('NEGOCIO', [
-            _tile(Icons.spa_outlined, 'Gestionar servicios', () {}),
-            _tile(Icons.people_outline, 'Equipo de trabajo', () {}),
+            _tile(Icons.spa_outlined, 'Gestionar servicios', () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminServiciosPage()))),
+            _tile(Icons.people_outline, 'Equipo de trabajo', () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminEquipoPage()))),
             _tile(Icons.schedule_outlined, 'Horarios', () {}),
+            _tile(Icons.manage_accounts_outlined, 'Permisos', () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AdminPermisosPage()))),
             _tile(Icons.bar_chart_outlined, 'Reportes', () {}),
           ]),
           const SizedBox(height: 16),

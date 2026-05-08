@@ -4,10 +4,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
+import 'package:sahara_club_spa_app/data/services/notification_service.dart';
 import 'package:sahara_club_spa_app/features/reception/data/reception_repository.dart';
 import 'package:sahara_club_spa_app/features/reception/pages/reception_home_page.dart';
 import 'package:sahara_club_spa_app/features/reception/pages/reception_agenda_page.dart';
 import 'package:sahara_club_spa_app/features/reception/pages/reception_clients_page.dart';
+import 'package:sahara_club_spa_app/features/reception/pages/reception_caja_page.dart';
+import 'package:sahara_club_spa_app/features/reception/pages/reception_messages_page.dart';
 
 class ReceptionShell extends StatefulWidget {
   const ReceptionShell({super.key});
@@ -21,16 +24,9 @@ class _ReceptionShellState extends State<ReceptionShell> {
   int _pendingCount = 0;
   String _userName  = 'Recepcionista';
   String? _avatarUrl;
+  Set<String> _permissions = {'ver_caja', 'ver_gastos', 'ver_clientes', 'cancelar_citas'};
   final _repo = ReceptionRepository();
   final _homeRefresh = ValueNotifier<int>(0);
-
-  static const _navItems = [
-    _NavItem(icon: Icons.home_outlined,            activeIcon: Icons.home_rounded,            label: 'Inicio'),
-    _NavItem(icon: Icons.calendar_month_outlined,  activeIcon: Icons.calendar_month_rounded,  label: 'Agenda'),
-    _NavItem(icon: Icons.people_outline,           activeIcon: Icons.people_rounded,          label: 'Clientes'),
-    _NavItem(icon: Icons.chat_bubble_outline,      activeIcon: Icons.chat_bubble_rounded,     label: 'Mensajes'),
-    _NavItem(icon: Icons.point_of_sale_outlined,   activeIcon: Icons.point_of_sale,           label: 'Caja'),
-  ];
 
   @override
   void initState() {
@@ -58,16 +54,19 @@ class _ReceptionShellState extends State<ReceptionShell> {
     try {
       final data = await Supabase.instance.client
           .from('profiles')
-          .select('full_name, avatar_url')
+          .select('full_name, avatar_url, permissions')
           .eq('id', user.id)
           .single();
       if (!mounted) return;
       setState(() {
         _userName  = data['full_name'] as String? ?? 'Recepcionista';
         _avatarUrl = data['avatar_url'] as String?;
+        final rawPerms = data['permissions'];
+        if (rawPerms is List) {
+          _permissions = rawPerms.cast<String>().toSet();
+        }
       });
     } catch (_) {
-      // Fallback a user metadata si falla la consulta
       final metaName = user.userMetadata?['full_name'] as String?;
       if (metaName != null && mounted) setState(() => _userName = metaName);
     }
@@ -86,17 +85,32 @@ class _ReceptionShellState extends State<ReceptionShell> {
       .map((w) => w[0].toUpperCase())
       .join();
 
+  List<_NavItem> _buildNavItems() => [
+    const _NavItem(icon: Icons.home_outlined,           activeIcon: Icons.home_rounded,           label: 'Inicio'),
+    const _NavItem(icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month_rounded, label: 'Agenda'),
+    if (_permissions.contains('ver_clientes'))
+      const _NavItem(icon: Icons.people_outline,        activeIcon: Icons.people_rounded,         label: 'Clientes'),
+    const _NavItem(icon: Icons.chat_bubble_outline,     activeIcon: Icons.chat_bubble_rounded,    label: 'Mensajes'),
+    if (_permissions.contains('ver_caja'))
+      const _NavItem(icon: Icons.point_of_sale_outlined, activeIcon: Icons.point_of_sale,         label: 'Caja'),
+  ];
+
+  List<Widget> _buildPages() => [
+    ReceptionHomePage(repo: _repo, onPendingChanged: _loadPendingCount, refreshNotifier: _homeRefresh),
+    ReceptionAgendaPage(repo: _repo),
+    if (_permissions.contains('ver_clientes'))
+      ReceptionClientsPage(repo: _repo),
+    ReceptionMessagesPage(repo: _repo),
+    if (_permissions.contains('ver_caja'))
+      ReceptionCajaPage(repo: _repo),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 768;
-
-    final pages = [
-      ReceptionHomePage(repo: _repo, onPendingChanged: _loadPendingCount, refreshNotifier: _homeRefresh),
-      ReceptionAgendaPage(repo: _repo),
-      ReceptionClientsPage(repo: _repo),
-      const _MensajesPlaceholder(),
-      const _CajaPlaceholder(),
-    ];
+    final navItems = _buildNavItems();
+    final pages    = _buildPages();
+    final safeIndex = _index.clamp(0, pages.length - 1);
 
     if (isMobile) {
       return Scaffold(
@@ -171,14 +185,21 @@ class _ReceptionShellState extends State<ReceptionShell> {
             ),
           ],
         ),
-        body: IndexedStack(index: _index, children: pages),
-        bottomNavigationBar: _BottomNav(
-          currentIndex: _index,
-          items: _navItems,
-          pendingBadge: _pendingCount,
-          onTap: (i) {
-            if (i == 0 && _index != 0) _homeRefresh.value++;
-            setState(() => _index = i);
+        body: IndexedStack(index: safeIndex, children: pages),
+        bottomNavigationBar: ValueListenableBuilder<bool>(
+          valueListenable: NotificationService.instance.unreadChatNotifier,
+          builder: (context, hasUnreadChat, child) {
+            return _BottomNav(
+              currentIndex: safeIndex,
+              items: navItems,
+              pendingBadge: _pendingCount,
+              hasUnreadChat: hasUnreadChat,
+              onTap: (i) {
+                if (i == 0 && _index != 0) _homeRefresh.value++;
+                if (navItems[i].label == 'Mensajes') NotificationService.instance.markChatAsRead();
+                setState(() => _index = i);
+              },
+            );
           },
         ),
       );
@@ -191,14 +212,23 @@ class _ReceptionShellState extends State<ReceptionShell> {
         children: [
           SizedBox(
             width: 240,
-            child: _Sidebar(
-              currentIndex: _index,
-              items:        _navItems,
-              pendingBadge: _pendingCount,
-              userName:     _userName,
-              avatarUrl:    _avatarUrl,
-              onTap:        (i) => setState(() => _index = i),
-              onLogout:     _logout,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: NotificationService.instance.unreadChatNotifier,
+              builder: (context, hasUnreadChat, child) {
+                return _Sidebar(
+                  currentIndex: safeIndex,
+                  items:        navItems,
+                  pendingBadge: _pendingCount,
+                  hasUnreadChat: hasUnreadChat,
+                  userName:     _userName,
+                  avatarUrl:    _avatarUrl,
+                  onTap:        (i) {
+                    if (navItems[i].label == 'Mensajes') NotificationService.instance.markChatAsRead();
+                    setState(() => _index = i);
+                  },
+                  onLogout:     _logout,
+                );
+              },
             ),
           ),
           Expanded(
@@ -210,7 +240,7 @@ class _ReceptionShellState extends State<ReceptionShell> {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: IndexedStack(index: _index, children: pages),
+              child: IndexedStack(index: safeIndex, children: pages),
             ),
           ),
         ],
@@ -268,12 +298,14 @@ class _BottomNav extends StatelessWidget {
   final int currentIndex;
   final List<_NavItem> items;
   final int pendingBadge;
+  final bool hasUnreadChat;
   final ValueChanged<int> onTap;
 
   const _BottomNav({
     required this.currentIndex,
     required this.items,
     required this.pendingBadge,
+    this.hasUnreadChat = false,
     required this.onTap,
   });
 
@@ -293,6 +325,7 @@ class _BottomNav extends StatelessWidget {
               final item       = items[i];
               final isSelected = i == currentIndex;
               final hasBadge   = i == 0 && pendingBadge > 0;
+              final isChatAlert = item.label == 'Mensajes' && hasUnreadChat;
 
               return Expanded(
                 child: GestureDetector(
@@ -311,16 +344,16 @@ class _BottomNav extends StatelessWidget {
                                 ? SaharaColors.gold
                                 : SaharaColors.grayText.withValues(alpha: 0.5),
                           ),
-                          if (hasBadge)
+                          if (hasBadge || isChatAlert)
                             Positioned(
                               top: -4, right: -6,
                               child: Container(
-                                padding: const EdgeInsets.all(3),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFFB74D),
+                                padding: isChatAlert ? const EdgeInsets.all(4) : const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: isChatAlert ? Colors.redAccent : const Color(0xFFFFB74D),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Text('$pendingBadge',
+                                child: Text(isChatAlert ? '!' : '$pendingBadge',
                                   style: GoogleFonts.inter(
                                     fontSize: 8, color: Colors.black,
                                     fontWeight: FontWeight.w800,
@@ -358,6 +391,7 @@ class _Sidebar extends StatelessWidget {
   final int currentIndex;
   final List<_NavItem> items;
   final int pendingBadge;
+  final bool hasUnreadChat;
   final String userName;
   final String? avatarUrl;
   final ValueChanged<int> onTap;
@@ -367,6 +401,7 @@ class _Sidebar extends StatelessWidget {
     required this.currentIndex,
     required this.items,
     required this.pendingBadge,
+    this.hasUnreadChat = false,
     required this.userName,
     required this.avatarUrl,
     required this.onTap,
@@ -450,6 +485,7 @@ class _Sidebar extends StatelessWidget {
             item: items[i],
             isSelected: i == currentIndex,
             badge: i == 0 ? pendingBadge : 0,
+            hasUnreadChat: items[i].label == 'Mensajes' && hasUnreadChat,
             onTap: () => onTap(i),
           )),
 
@@ -511,6 +547,7 @@ class _SidebarItem extends StatelessWidget {
   final _NavItem item;
   final bool isSelected;
   final int badge;
+  final bool hasUnreadChat;
   final VoidCallback onTap;
 
   const _SidebarItem({
@@ -518,6 +555,7 @@ class _SidebarItem extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.badge = 0,
+    this.hasUnreadChat = false,
   });
 
   @override
@@ -557,14 +595,14 @@ class _SidebarItem extends StatelessWidget {
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             )),
             const Spacer(),
-            if (badge > 0)
+            if (badge > 0 || hasUnreadChat)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: hasUnreadChat ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFB74D),
+                  color: hasUnreadChat ? Colors.redAccent : const Color(0xFFFFB74D),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text('$badge', style: GoogleFonts.inter(
+                child: Text(hasUnreadChat ? '!' : '$badge', style: GoogleFonts.inter(
                   fontSize: 10, color: Colors.black, fontWeight: FontWeight.w700,
                 )),
               )
@@ -576,76 +614,6 @@ class _SidebarItem extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Placeholders ──────────────────────────────────────────────────────────────
-
-class _MensajesPlaceholder extends StatelessWidget {
-  const _MensajesPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return _Placeholder(
-      icon: Icons.chat_bubble_outline_rounded,
-      title: 'Mensajes',
-      subtitle: 'El chat interno estará disponible próximamente.',
-    );
-  }
-}
-
-class _CajaPlaceholder extends StatelessWidget {
-  const _CajaPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return _Placeholder(
-      icon: Icons.point_of_sale_outlined,
-      title: 'Caja',
-      subtitle: 'El módulo de caja estará disponible próximamente.',
-    );
-  }
-}
-
-class _Placeholder extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  const _Placeholder({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: SaharaColors.gold.withValues(alpha: 0.07),
-              shape: BoxShape.circle,
-              border: Border.all(
-                  color: SaharaColors.gold.withValues(alpha: 0.2)),
-            ),
-            child: Icon(icon, color: SaharaColors.gold, size: 40),
-          ),
-          const SizedBox(height: 20),
-          Text(title, style: GoogleFonts.playfairDisplay(
-            fontSize: 22, color: SaharaColors.whiteSoft,
-            fontWeight: FontWeight.w300, letterSpacing: 1,
-          )),
-          const SizedBox(height: 8),
-          Text(subtitle, style: GoogleFonts.inter(
-            fontSize: 13, color: SaharaColors.grayText,
-          )),
-        ],
       ),
     );
   }

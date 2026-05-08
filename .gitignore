@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Supabase Vault setup — contains real service_role key, never commit
+supabase/vault_setup.sql

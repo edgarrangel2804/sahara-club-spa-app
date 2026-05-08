@@ -7,6 +7,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:sahara_club_spa_app/core/app.dart';
 import 'package:sahara_club_spa_app/core/locale_cubit.dart';
 import 'package:sahara_club_spa_app/core/injection.dart';
+import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/data/services/notification_service.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
 
@@ -19,6 +20,18 @@ void main() async {
   try {
     await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    // Tap en notificación cuando la app estaba en background
+    FirebaseMessaging.onMessageOpenedApp.listen(_onNotificationTap);
+
+    // Tap en notificación cuando la app estaba cerrada (terminated)
+    final initialMsg = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMsg != null) {
+      // Esperar a que el navigator esté listo antes de navegar
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _onNotificationTap(initialMsg),
+      );
+    }
   } catch (e) {
     debugPrint('Firebase no inicializado (falta google-services.json): $e');
   }
@@ -51,4 +64,11 @@ void main() async {
       child: const SaharaApp(),
     ),
   );
+}
+
+// Navega al section adecuado cuando el usuario toca una push notification.
+// AuthGate re-evalúa el rol y redirige al shell correcto.
+void _onNotificationTap(RemoteMessage message) {
+  saharaNavigatorKey.currentState
+      ?.pushNamedAndRemoveUntil(AppRoutes.authGate, (_) => false);
 }

@@ -27,44 +27,51 @@ class AppRoutes {
 Route<dynamic> onGenerateRoute(RouteSettings settings) {
   switch (settings.name) {
     case AppRoutes.splash:
-      return _fade(const SplashScreen());
+      return _fade(const SplashScreen(), settings);
 
     case AppRoutes.authGate:
-      return _fade(const AuthGate());
+      return _fade(const AuthGate(), settings);
 
     case AppRoutes.login:
-      return _fade(const LoginScreen());
+      return _fade(const LoginScreen(), settings);
 
     case AppRoutes.register:
-      return _fade(const RegisterScreen());
+      return _fade(const RegisterScreen(), settings);
 
     case AppRoutes.services:
-      return _fade(const ClientShell());
+      return _fade(const ClientShell(), settings);
 
     case AppRoutes.serviceDetail:
       final service = settings.arguments as SpaService;
-      return MaterialPageRoute(builder: (_) => ServiceDetailScreen(service: service));
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => ServiceDetailScreen(service: service),
+      );
 
     case AppRoutes.bookingRequest:
       final service = settings.arguments as SpaService;
-      return MaterialPageRoute(builder: (_) => BookingRequestScreen(service: service));
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => BookingRequestScreen(service: service),
+      );
 
     case AppRoutes.adminDashboard:
-      return _fade(const AdminDashboardPage());
+      return _fade(const AdminDashboardPage(), settings);
 
     case AppRoutes.therapistDashboard:
-      return _fade(const TherapistShell());
+      return _fade(const TherapistShell(), settings);
 
     case AppRoutes.receptionDashboard:
-      return _fade(const ReceptionShell());
+      return _fade(const ReceptionShell(), settings);
 
     default:
-      return _fade(const SplashScreen());
+      return _fade(const SplashScreen(), settings);
   }
 }
 
-PageRouteBuilder<dynamic> _fade(Widget page) {
+PageRouteBuilder<dynamic> _fade(Widget page, RouteSettings settings) {
   return PageRouteBuilder(
+    settings: settings,
     transitionDuration: const Duration(milliseconds: 900),
     pageBuilder: (_, __, ___) => page,
     transitionsBuilder: (_, animation, __, child) {

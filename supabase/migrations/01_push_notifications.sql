@@ -19,7 +19,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    edge_url        text := 'https://TU_PROJECT_ID.supabase.co/functions/v1/send-push-notification';
+    edge_url        text := 'https://fkbyxhwdcsgrrixalzwf.supabase.co/functions/v1/send-push-notification';
     service_role_key text;
 BEGIN
     SELECT decrypted_secret INTO service_role_key
