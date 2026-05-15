@@ -256,62 +256,6 @@ class _BookingCard extends StatefulWidget {
 }
 
 class _BookingCardState extends State<_BookingCard> {
-  bool _cancelling = false;
-
-  static const _cancellableStatuses = {'scheduled', 'confirmed', 'rescheduled'};
-
-  Future<void> _confirmCancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF111111),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('¿Cancelar cita?',
-            style: GoogleFonts.playfairDisplay(
-                fontSize: 18, color: SaharaColors.whiteSoft)),
-        content: Text(
-          'Esta acción no se puede deshacer. Si necesitas reagendar, contacta a recepción.',
-          style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Volver',
-                style: GoogleFonts.inter(color: SaharaColors.grayText)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Cancelar cita',
-                style: GoogleFonts.inter(
-                    color: const Color(0xFFEF5350),
-                    fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _cancelling = true);
-    try {
-      await Supabase.instance.client
-          .from('bookings')
-          .update({'status': 'cancelled'})
-          .eq('id', widget.booking['id'] as String);
-      if (mounted) widget.onRefresh?.call();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('No se pudo cancelar: $e',
-              style: GoogleFonts.inter(color: SaharaColors.whiteSoft)),
-          backgroundColor: SaharaColors.grayDark,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ));
-        setState(() => _cancelling = false);
-      }
-    }
-  }
-
   static Color _statusColor(String status) => switch (status) {
     'confirmed'  => const Color(0xFF4CAF50),
     'checked_in' => const Color(0xFF2088D8),
@@ -361,7 +305,6 @@ class _BookingCardState extends State<_BookingCard> {
     final therapist   = (widget.booking['therapists'] as Map?)?['full_name'] as String?;
     final price       = (widget.booking['price'] as num?)?.toDouble() ?? 0;
     final notes       = widget.booking['client_notes'] as String?;
-    final canCancel   = widget.onRefresh != null && _cancellableStatuses.contains(status);
 
     DateTime? date;
     try { date = DateTime.parse(dateStr); } catch (_) {}
@@ -442,64 +385,32 @@ class _BookingCardState extends State<_BookingCard> {
                     fontStyle: FontStyle.italic,
                   ), maxLines: 2, overflow: TextOverflow.ellipsis),
                 ],
-                if (widget.onContactReception != null || canCancel) ...[
+                if (widget.onContactReception != null) ...[
                   const SizedBox(height: 14),
                   Divider(color: SaharaColors.gold.withValues(alpha: 0.1), height: 1),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      if (widget.onContactReception != null)
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: widget.onContactReception,
-                            behavior: HitTestBehavior.opaque,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.chat_bubble_outline_rounded,
-                                  size: 13,
-                                  color: SaharaColors.gold.withValues(alpha: 0.65),
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text('¿Necesitas cambiar esta cita? Contactar recepción',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11.5,
-                                      color: SaharaColors.gold.withValues(alpha: 0.65),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                  GestureDetector(
+                    onTap: widget.onContactReception,
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.chat_bubble_outline_rounded,
+                          size: 13,
+                          color: SaharaColors.gold.withValues(alpha: 0.65),
                         ),
-                      if (canCancel) ...[
-                        if (widget.onContactReception != null) const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _cancelling ? null : _confirmCancel,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEF5350).withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFFEF5350).withValues(alpha: 0.3)),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text('¿Necesitas cambiar esta cita? Contactar recepción',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: SaharaColors.gold.withValues(alpha: 0.65),
+                              fontWeight: FontWeight.w500,
                             ),
-                            child: _cancelling
-                                ? const SizedBox(
-                                    width: 12, height: 12,
-                                    child: CircularProgressIndicator(
-                                        color: Color(0xFFEF5350), strokeWidth: 1.5))
-                                : Text('Cancelar',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 11.5,
-                                      color: const Color(0xFFEF5350),
-                                      fontWeight: FontWeight.w600,
-                                    )),
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ],

@@ -58,9 +58,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => _loading = true);
     HapticFeedback.mediumImpact();
     try {
+      final user = Supabase.instance.client.auth.currentUser;
       final response = await Supabase.instance.client.functions.invoke(
         'create-checkout-session',
         body: {
+          'user_id': user?.id,
           'customer_name': _nameCtrl.text.trim(),
           'customer_email': _emailCtrl.text.trim(),
           'customer_phone': _phoneCtrl.text.trim(),

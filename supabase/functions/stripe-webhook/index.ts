@@ -1,20 +1,21 @@
 // Edge Function — stripe-webhook
-// Listens for Stripe checkout.session.completed, marks order as paid,
-// and creates individual order_items rows.
+// Listens for Stripe checkout.session.completed and marks the order as paid.
+// order_items are already created at checkout time; this just updates the status.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  loadActiveStripeSettings,
+  DEFAULT_BRANCH_ID,
+} from '../_shared/stripe_settings.ts';
 
-const STRIPE_KEY            = Deno.env.get('STRIPE_SECRET_KEY')!;
-const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET')!;
-const SUPABASE_URL          = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_KEY           = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase     = createClient(SUPABASE_URL, SERVICE_KEY);
 
 async function verifyStripeSignature(body: string, sig: string, secret: string): Promise<boolean> {
   const encoder = new TextEncoder();
-  const parts = sig.split(',');
+  const parts     = sig.split(',');
   const timestamp = parts.find(p => p.startsWith('t='))?.split('=')[1];
   const v1        = parts.find(p => p.startsWith('v1='))?.split('=')[1];
   if (!timestamp || !v1) return false;
@@ -33,12 +34,13 @@ serve(async (req) => {
   const body = await req.text();
   const sig  = req.headers.get('stripe-signature') ?? '';
 
-  // Verify signature if secret is configured
-  if (STRIPE_WEBHOOK_SECRET) {
-    const valid = await verifyStripeSignature(body, sig, STRIPE_WEBHOOK_SECRET);
-    if (!valid) {
-      return new Response('Invalid signature', { status: 400 });
-    }
+  // Load webhook secret from DB
+  const stripeSettings = await loadActiveStripeSettings(supabase, DEFAULT_BRANCH_ID);
+  const webhookSecret  = stripeSettings?.webhookSecret ?? '';
+
+  if (webhookSecret) {
+    const valid = await verifyStripeSignature(body, sig, webhookSecret);
+    if (!valid) return new Response('Invalid signature', { status: 400 });
   }
 
   let event: Record<string, unknown>;
@@ -54,50 +56,26 @@ serve(async (req) => {
     });
   }
 
-  const session = event.data as Record<string, unknown>;
-  const sessionObj = session.object as Record<string, unknown>;
-  const sessionId = sessionObj.id as string;
+  const sessionObj = (event.data as Record<string, unknown>).object as Record<string, unknown>;
+  const sessionId  = sessionObj.id as string;
 
-  // Find the order
-  const { data: order, error: orderErr } = await supabase
+  const { data: order } = await supabase
     .from('orders')
-    .select('id, items')
+    .select('id')
     .eq('stripe_session_id', sessionId)
     .single();
 
-  if (orderErr || !order) {
+  if (!order) {
     console.error('Order not found for session', sessionId);
     return new Response(JSON.stringify({ received: true, warning: 'order not found' }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  // Update order status to paid
   await supabase
     .from('orders')
-    .update({ status: 'paid' })
+    .update({ status: 'paid', paid_at: new Date().toISOString() })
     .eq('id', order.id);
-
-  // Create order_items from the stored items JSONB
-  const items = (order.items as Record<string, unknown>[]) ?? [];
-  if (items.length > 0) {
-    const itemRows = items.flatMap((item: Record<string, unknown>) => {
-      const qty = (item.quantity as number) ?? 1;
-      return Array.from({ length: qty }, () => ({
-        order_id:     order.id,
-        product_id:   item.product_id as string ?? '',
-        product_name: item.name as string ?? '',
-        product_type: item.product_type as string ?? 'service',
-        unit_price:   item.unit_price as number ?? 0,
-        quantity:     1,
-        currency:     (item.currency as string ?? 'mxn').toLowerCase(),
-        category_key: item.category_key as string ?? '',
-        image_url:    item.image_url as string ?? '',
-      }));
-    });
-
-    await supabase.from('order_items').insert(itemRows);
-  }
 
   return new Response(JSON.stringify({ received: true, order_id: order.id }), {
     headers: { 'Content-Type': 'application/json' },

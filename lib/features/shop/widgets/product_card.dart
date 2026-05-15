@@ -124,7 +124,7 @@ class ProductCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const Spacer(),
+                      const SizedBox(height: 4),
                       // Subtítulo
                       Text(
                         subtitle,

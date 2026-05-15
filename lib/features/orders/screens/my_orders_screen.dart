@@ -25,8 +25,8 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     if (user == null) return [];
     final resp = await Supabase.instance.client
         .from('orders')
-        .select('id, status, total_amount, currency, created_at, customer_name, order_items(id, product_name, product_type, unit_price, quantity, redeemed_at)')
-        .or('user_id.eq.${user.id},customer_email.eq.${user.email}')
+        .select('id, status, total, currency, created_at, customer_name, order_items(id, product_name, product_type, unit_price, quantity, redeemed_at)')
+        .or('customer_id.eq.${user.id},customer_email.eq.${user.email}')
         .order('created_at', ascending: false);
     return (resp as List).cast<Map<String, dynamic>>();
   }
@@ -143,7 +143,7 @@ class _OrderTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = (order['order_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final total = (order['total_amount'] as num?)?.toDouble() ?? 0;
+    final total = (order['total'] as num?)?.toDouble() ?? 0;
     final date  = DateTime.tryParse(order['created_at'] as String? ?? '');
     final dateStr = date != null
         ? '${date.day.toString().padLeft(2,'0')} ${_month(date.month)} ${date.year}'

@@ -25,13 +25,13 @@ class _ShopScreenState extends State<ShopScreen>
   List<Map<String, dynamic>> _digital  = [];
   bool _loading = true;
 
-  static const _tabs  = ['Rituales', 'Tienda', 'Digital', 'Regalos'];
+  static const _tabs  = ['Rituales', 'Tienda', 'Digital', 'Regalos', 'Membresías'];
   static const _types = ['service', 'physical', 'digital'];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() => setState(() {}));
     _loadAll();
   }
@@ -101,6 +101,7 @@ class _ShopScreenState extends State<ShopScreen>
                             itemTag: 'Digital',
                           ),
                           const _GiftCardTab(),
+                          const _MembershipsTab(),
                         ],
                       ),
               ),
@@ -506,6 +507,282 @@ class _GiftAmountCard extends StatelessWidget {
             ),
             Icon(Icons.chevron_right_rounded,
                 color: SaharaColors.gold.withValues(alpha: 0.4), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Tab de Membresías ─────────────────────────────────────────────────────────
+
+class _MembershipsTab extends StatelessWidget {
+  const _MembershipsTab();
+
+  static const _tiers = [
+    _Tier(
+      title: 'Oasis Plata',
+      subtitle: 'Lujo de entrada',
+      price: '\$250',
+      period: '/mes',
+      accent: Color(0xFFB8B8C8),
+      benefits: ['Reserva prioritaria de rituales', 'Esenciales de ritual de cortesía'],
+      excluded: ['Concierge digital de bienestar', 'Acceso privado al santuario'],
+    ),
+    _Tier(
+      title: 'Duna Dorada',
+      subtitle: 'La experiencia de autor',
+      price: '\$550',
+      period: '/mes',
+      accent: SaharaColors.gold,
+      featured: true,
+      benefits: ['Reserva prioritaria de rituales', 'Esenciales de ritual de cortesía', 'Concierge digital de bienestar'],
+      excluded: ['Acceso privado al santuario'],
+    ),
+    _Tier(
+      title: 'Sahara Black',
+      subtitle: 'El nivel más alto',
+      price: '\$1,200',
+      period: '/mes',
+      accent: Color(0xFF8A7560),
+      benefits: ['Reserva prioritaria de rituales', 'Esenciales de ritual de cortesía', 'Concierge digital de bienestar', 'Acceso privado al santuario'],
+      excluded: [],
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+      children: [
+        Text('MEMBRESÍA ELITE', style: GoogleFonts.inter(
+          fontSize: 10, color: SaharaColors.gold,
+          letterSpacing: 4, fontWeight: FontWeight.w600,
+        )),
+        const SizedBox(height: 14),
+        Text(
+          'Acceso exclusivo\na un mundo de\nbienestar.',
+          style: GoogleFonts.playfairDisplay(
+            fontSize: 30, color: SaharaColors.whiteSoft,
+            fontWeight: FontWeight.w300, height: 1.15,
+          ),
+        ),
+        const SizedBox(height: 28),
+        ..._tiers.map((t) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _TierCard(tier: t),
+        )),
+      ],
+    );
+  }
+}
+
+class _Tier {
+  final String title, subtitle, price, period;
+  final Color accent;
+  final bool featured;
+  final List<String> benefits;
+  final List<String> excluded;
+  const _Tier({
+    required this.title,
+    required this.subtitle,
+    required this.price,
+    required this.period,
+    required this.accent,
+    this.featured = false,
+    required this.benefits,
+    required this.excluded,
+  });
+}
+
+class _TierCard extends StatelessWidget {
+  final _Tier tier;
+  const _TierCard({required this.tier});
+
+  void _addToCart(BuildContext context) {
+    ShopCartController.instance.add({
+      'id': 'mem-${tier.title.toLowerCase().replaceAll(' ', '-')}',
+      'name': tier.title,
+      'description': tier.subtitle,
+      'price': double.parse(tier.price.replaceAll(RegExp(r'[^\d.]'), '')),
+      'type': 'membership',
+      'category': 'membership',
+    });
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CartScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = tier.accent;
+    return Container(
+      decoration: BoxDecoration(
+        color: tier.featured ? const Color(0xFF0F0E0A) : const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: tier.featured
+              ? accent.withValues(alpha: 0.4)
+              : accent.withValues(alpha: 0.15),
+          width: tier.featured ? 1.2 : 0.8,
+        ),
+        boxShadow: tier.featured
+            ? [BoxShadow(
+                color: accent.withValues(alpha: 0.08),
+                blurRadius: 24, offset: const Offset(0, 8))]
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Badge título
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: accent.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(tier.title.toUpperCase(), style: GoogleFonts.inter(
+                    fontSize: 9, color: accent,
+                    letterSpacing: 2.5, fontWeight: FontWeight.w700,
+                  )),
+                ),
+                if (tier.featured) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('MÁS POPULAR', style: GoogleFonts.inter(
+                      fontSize: 8, color: SaharaColors.black,
+                      letterSpacing: 1.5, fontWeight: FontWeight.w800,
+                    )),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(tier.subtitle, style: GoogleFonts.inter(
+              fontSize: 12, color: accent.withValues(alpha: 0.7), letterSpacing: 0.5,
+            )),
+            const SizedBox(height: 6),
+            RichText(
+              text: TextSpan(children: [
+                TextSpan(
+                  text: tier.price,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 34, color: accent, fontWeight: FontWeight.w400,
+                  ),
+                ),
+                TextSpan(
+                  text: ' MXN${tier.period}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12, color: SaharaColors.grayText.withValues(alpha: 0.6),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            Container(height: 0.5, color: accent.withValues(alpha: 0.12)),
+            const SizedBox(height: 14),
+            // Beneficios incluidos
+            ...tier.benefits.map((b) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 20, height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent.withValues(alpha: 0.15),
+                      border: Border.all(color: accent.withValues(alpha: 0.4)),
+                    ),
+                    child: Icon(Icons.check_rounded, size: 11, color: accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(b, style: GoogleFonts.inter(
+                    fontSize: 13, color: SaharaColors.whiteSoft.withValues(alpha: 0.85),
+                  ))),
+                ],
+              ),
+            )),
+            // Beneficios excluidos
+            ...tier.excluded.map((b) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 20, height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.04),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Icon(Icons.close_rounded, size: 11,
+                        color: SaharaColors.grayText.withValues(alpha: 0.3)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(b, style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: SaharaColors.grayText.withValues(alpha: 0.35),
+                    fontWeight: FontWeight.w300,
+                  ))),
+                ],
+              ),
+            )),
+            const SizedBox(height: 6),
+            // CTA
+            SizedBox(
+              width: double.infinity,
+              child: tier.featured
+                  ? Container(
+                      decoration: BoxDecoration(
+                        gradient: SaharaGradients.goldShimmer,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [BoxShadow(
+                          color: accent.withValues(alpha: 0.2),
+                          blurRadius: 12, offset: const Offset(0, 4),
+                        )],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: () => _addToCart(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: SaharaColors.black,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          textStyle: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('SOLICITAR ACCESO'),
+                      ),
+                    )
+                  : OutlinedButton(
+                      onPressed: () => _addToCart(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accent,
+                        side: BorderSide(color: accent.withValues(alpha: 0.4)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        textStyle: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('SELECCIONAR'),
+                    ),
+            ),
           ],
         ),
       ),
