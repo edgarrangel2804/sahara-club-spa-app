@@ -5,6 +5,7 @@ import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/features/shop/controllers/shop_cart_controller.dart';
 import 'package:sahara_club_spa_app/features/shop/models/cart_item.dart';
 import 'package:sahara_club_spa_app/features/shop/screens/cart_screen.dart';
+import 'package:sahara_club_spa_app/features/shop/screens/gift_card_screen.dart';
 import 'package:sahara_club_spa_app/features/shop/screens/product_detail_screen.dart';
 import 'package:sahara_club_spa_app/features/shop/widgets/product_card.dart';
 
@@ -19,13 +20,12 @@ class _ShopScreenState extends State<ShopScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
-  // Datos por tab — se cargan una sola vez
-  List<Map<String, dynamic>> _services  = [];
-  List<Map<String, dynamic>> _physical  = [];
-  List<Map<String, dynamic>> _digital   = [];
+  List<Map<String, dynamic>> _services = [];
+  List<Map<String, dynamic>> _physical = [];
+  List<Map<String, dynamic>> _digital  = [];
   bool _loading = true;
 
-  static const _tabs = ['Rituales', 'Tienda', 'Digital'];
+  static const _tabs  = ['Rituales', 'Tienda', 'Digital', 'Regalos'];
   static const _types = ['service', 'physical', 'digital'];
 
   @override
@@ -88,17 +88,19 @@ class _ShopScreenState extends State<ShopScreen>
                           _ProductGrid(
                             items: _services,
                             emptyLabel: 'Sin rituales disponibles',
+                            itemTag: 'Ritual',
                           ),
                           _ProductGrid(
                             items: _physical,
-                            emptyLabel: 'Productos físicos próximamente',
-                            comingSoon: true,
+                            emptyLabel: 'Sin productos disponibles',
+                            itemTag: 'Físico',
                           ),
                           _ProductGrid(
                             items: _digital,
-                            emptyLabel: 'Contenido digital próximamente',
-                            comingSoon: true,
+                            emptyLabel: 'Sin contenido disponible',
+                            itemTag: 'Digital',
                           ),
+                          const _GiftCardTab(),
                         ],
                       ),
               ),
@@ -212,37 +214,40 @@ class _ShopScreenState extends State<ShopScreen>
   Widget _buildTabBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
-      child: Row(
-        children: List.generate(_tabs.length, (i) {
-          final isSelected = _tabController.index == i;
-          return GestureDetector(
-            onTap: () => _tabController.animateTo(i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(right: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? SaharaColors.gold.withValues(alpha: 0.12)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(_tabs.length, (i) {
+            final isSelected = _tabController.index == i;
+            return GestureDetector(
+              onTap: () => _tabController.animateTo(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                decoration: BoxDecoration(
                   color: isSelected
-                      ? SaharaColors.gold.withValues(alpha: 0.6)
-                      : SaharaColors.grayDark,
+                      ? SaharaColors.gold.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? SaharaColors.gold.withValues(alpha: 0.6)
+                        : SaharaColors.grayDark,
+                  ),
+                ),
+                child: Text(
+                  _tabs[i],
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: isSelected ? SaharaColors.gold : SaharaColors.grayText,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
                 ),
               ),
-              child: Text(
-                _tabs[i],
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: isSelected ? SaharaColors.gold : SaharaColors.grayText,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }
@@ -253,12 +258,12 @@ class _ShopScreenState extends State<ShopScreen>
 class _ProductGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final String emptyLabel;
-  final bool comingSoon;
+  final String itemTag;
 
   const _ProductGrid({
     required this.items,
     required this.emptyLabel,
-    this.comingSoon = false,
+    required this.itemTag,
   });
 
   static String _imageFor(String? category) => switch (category) {
@@ -301,103 +306,208 @@ class _ProductGrid extends StatelessWidget {
     _                     => Icons.shopping_bag_outlined,
   };
 
+  static String _categoryLabelFor(String? category) => switch (category) {
+    'masajes'             => 'Masaje',
+    'faciales'            => 'Facial',
+    'faciales_combo'      => 'Facial',
+    'corporales'          => 'Corporal',
+    'tecnologia_facial'   => 'Tecnología',
+    'moldeo'              => 'Moldeo',
+    'tecnologia_corporal' => 'Tecnología',
+    'fusionadas'          => 'Fusionado',
+    'colaboraciones'      => 'Colaboración',
+    'sahara_house'        => 'Sahara House',
+    _                     => '',
+  };
+
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty && !comingSoon) {
+    if (items.isEmpty) {
       return Center(
         child: Text(emptyLabel, style: GoogleFonts.inter(
-          fontSize: 14, color: SaharaColors.grayText.withValues(alpha: 0.5),
+          fontSize: 14,
+          color: SaharaColors.grayText.withValues(alpha: 0.5),
         )),
       );
     }
 
-    return Stack(
-      children: [
-        GridView.builder(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.72,
-          ),
-          itemCount: items.isEmpty ? 6 : items.length,
-          itemBuilder: (ctx, i) {
-            if (items.isEmpty) {
-              // Placeholder skeleton cuando no hay datos
-              return _SkeletonCard();
-            }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.72,
+      ),
+      itemCount: items.length,
+      itemBuilder: (ctx, i) {
+        final p = items[i];
+        final price    = (p['price'] as num?)?.toDouble() ?? 0;
+        final category = p['category'] as String?;
+        final imageUrl = p['image'] as String?;
+        final duration = p['duration'] as int?;
+        final subtitle = duration != null
+            ? '$duration min'
+            : (p['description'] as String? ?? '');
+        final catLabel = _categoryLabelFor(category);
+        final tag      = catLabel.isNotEmpty ? catLabel : itemTag;
 
-            final p = items[i];
-            final price = (p['price'] as num?)?.toDouble() ?? 0;
-            final category = p['category'] as String?;
-            final imageUrl = p['image'] as String?;
-            final duration = p['duration'] as int?;
-            final subtitle = duration != null ? '$duration min' : (p['description'] as String? ?? '');
-
-            return ProductCard(
-              name: p['name'] as String? ?? '',
-              subtitle: subtitle,
-              price: price.toStringAsFixed(0),
-              imageUrl: imageUrl,
-              imagePath: imageUrl == null ? _imageFor(category) : null,
-              icon: _iconFor(category),
-              accentColor: _accentFor(category),
-              priceOnQuote: price == 0,
-              onTap: () => Navigator.push(
-                ctx,
-                MaterialPageRoute(
-                  builder: (_) => ProductDetailScreen(product: p),
-                ),
-              ),
-            );
-          },
-        ),
-
-        // Badge "Próximamente" para tabs sin datos reales aún
-        if (comingSoon && items.isEmpty)
-          Positioned(
-            bottom: 110, left: 0, right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: SaharaColors.black.withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                      color: SaharaColors.gold.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.lock_outline_rounded, size: 13,
-                        color: SaharaColors.gold.withValues(alpha: 0.7)),
-                    const SizedBox(width: 7),
-                    Text('Disponible próximamente', style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: SaharaColors.gold.withValues(alpha: 0.8),
-                      letterSpacing: 0.5,
-                    )),
-                  ],
-                ),
-              ),
+        return ProductCard(
+          name: p['name'] as String? ?? '',
+          subtitle: subtitle,
+          price: price.toStringAsFixed(0),
+          imageUrl: imageUrl,
+          imagePath: (imageUrl == null || imageUrl.isEmpty)
+              ? _imageFor(category)
+              : null,
+          icon: _iconFor(category),
+          accentColor: _accentFor(category),
+          priceOnQuote: price == 0,
+          tag: tag,
+          onTap: () => Navigator.push(
+            ctx,
+            MaterialPageRoute(
+              builder: (_) => ProductDetailScreen(product: p),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+// ── Tab de Gift Cards ─────────────────────────────────────────────────────────
+
+class _GiftCardTab extends StatelessWidget {
+  const _GiftCardTab();
+
+  static const _presets = [
+    _GiftPreset(amount: 1000,  label: '\$1,000', subtitle: 'Un ritual de entrada'),
+    _GiftPreset(amount: 2500,  label: '\$2,500', subtitle: 'La experiencia completa'),
+    _GiftPreset(amount: 5000,  label: '\$5,000', subtitle: 'Paquete premium'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+      children: [
+        // Hero copy
+        Text('REGALA BIENESTAR', style: GoogleFonts.inter(
+          fontSize: 10, color: SaharaColors.gold,
+          letterSpacing: 4, fontWeight: FontWeight.w600,
+        )),
+        const SizedBox(height: 14),
+        Text(
+          'El regalo más\nprofundo que\npuedes dar.',
+          style: GoogleFonts.playfairDisplay(
+            fontSize: 32, color: SaharaColors.whiteSoft,
+            fontWeight: FontWeight.w300, height: 1.15,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Gift cards con validez de 12 meses\npara cualquier ritual del spa.',
+          style: GoogleFonts.inter(
+            fontSize: 13, color: SaharaColors.grayText,
+            height: 1.65, fontWeight: FontWeight.w300,
+          ),
+        ),
+        const SizedBox(height: 32),
+        // Cards de montos
+        ..._presets.map((p) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _GiftAmountCard(preset: p),
+        )),
       ],
     );
   }
-
 }
 
-// ── Skeleton card de carga ────────────────────────────────────────────────────
+class _GiftPreset {
+  const _GiftPreset({
+    required this.amount,
+    required this.label,
+    required this.subtitle,
+  });
+  final int amount;
+  final String label;
+  final String subtitle;
+}
 
-class _SkeletonCard extends StatelessWidget {
+class _GiftAmountCard extends StatelessWidget {
+  const _GiftAmountCard({required this.preset});
+  final _GiftPreset preset;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: SaharaColors.grayDark.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(20),
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GiftCardScreen(
+            amount: preset.amount,
+            label: preset.label,
+          ),
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A0A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: SaharaColors.gold.withValues(alpha: 0.2),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    SaharaColors.gold.withValues(alpha: 0.2),
+                    SaharaColors.gold.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: SaharaColors.gold.withValues(alpha: 0.25),
+                  width: 0.8,
+                ),
+              ),
+              child: const Icon(Icons.card_giftcard_rounded,
+                  color: SaharaColors.gold, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(preset.subtitle, style: GoogleFonts.inter(
+                    fontSize: 12, color: SaharaColors.grayText,
+                    fontWeight: FontWeight.w300,
+                  )),
+                  const SizedBox(height: 4),
+                  Text(preset.label, style: GoogleFonts.playfairDisplay(
+                    fontSize: 22, color: SaharaColors.gold,
+                    fontWeight: FontWeight.w400,
+                  )),
+                  Text('MXN · Válida 12 meses', style: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: SaharaColors.grayText.withValues(alpha: 0.45),
+                  )),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: SaharaColors.gold.withValues(alpha: 0.4), size: 20),
+          ],
+        ),
       ),
     );
   }
