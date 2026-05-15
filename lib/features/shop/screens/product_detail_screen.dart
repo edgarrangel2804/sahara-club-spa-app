@@ -6,6 +6,7 @@ import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/features/services/bloc/services_bloc.dart';
 import 'package:sahara_club_spa_app/features/services/bloc/services_event.dart';
 import 'package:sahara_club_spa_app/features/services/bloc/services_state.dart';
+import 'package:sahara_club_spa_app/features/shop/controllers/shop_cart_controller.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ProductDetailScreen extends StatelessWidget {
@@ -357,12 +358,22 @@ class _CtaButton extends StatelessWidget {
         _navigateToBooking(context);
         break;
       case 'physical':
-      case 'digital':
+        ShopCartController.instance.add(product);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-            type == 'physical'
-                ? 'Tienda física próximamente'
-                : 'Contenido digital próximamente',
+            '${product['name'] ?? 'Producto'} agregado al carrito',
+            style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.whiteSoft),
+          ),
+          backgroundColor: const Color(0xFF1A1A1A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
+        break;
+      case 'digital':
+        ShopCartController.instance.add(product);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            '${product['name'] ?? 'Producto'} agregado al carrito',
             style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.whiteSoft),
           ),
           backgroundColor: const Color(0xFF1A1A1A),

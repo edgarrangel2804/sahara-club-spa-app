@@ -6,6 +6,8 @@ import 'package:sahara_club_spa_app/features/services/screens/services_screen.da
 import 'package:sahara_club_spa_app/features/bookings/screens/my_bookings_screen.dart';
 import 'package:sahara_club_spa_app/features/profile/profile_screen.dart';
 import 'package:sahara_club_spa_app/features/shop/screens/shop_screen.dart';
+import 'package:sahara_club_spa_app/features/shop/controllers/shop_cart_controller.dart';
+import 'package:sahara_club_spa_app/features/client/pages/client_messages_page.dart';
 
 class ClientShell extends StatefulWidget {
   const ClientShell({super.key});
@@ -29,7 +31,7 @@ class _ClientShellState extends State<ClientShell> {
     ServicesScreen(),
     MyBookingsScreen(),
     ShopScreen(),
-    _PlaceholderTab(icon: Icons.chat_bubble_outline,     label: 'Mensajes'),
+    ClientMessagesPage(),
     ProfileScreen(),
   ];
 
@@ -95,17 +97,67 @@ class _SaharaNavBar extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            isSelected ? tabs[i].activeIcon : tabs[i].icon,
-                            key: ValueKey(isSelected),
-                            size: 22,
-                            color: isSelected
-                                ? SaharaColors.gold
-                                : SaharaColors.grayText.withValues(alpha: 0.6),
+                        if (i == 2)
+                          ValueListenableBuilder<List>(
+                            valueListenable: ShopCartController.instance,
+                            builder: (context, items, _) {
+                              final count = ShopCartController.instance.itemCount;
+                              return Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 200),
+                                    child: Icon(
+                                      isSelected ? tabs[i].activeIcon : tabs[i].icon,
+                                      key: ValueKey(isSelected),
+                                      size: 22,
+                                      color: isSelected
+                                          ? SaharaColors.gold
+                                          : SaharaColors.grayText.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  if (count > 0)
+                                    Positioned(
+                                      right: -7,
+                                      top: -5,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 16,
+                                          minHeight: 16,
+                                        ),
+                                        decoration: const BoxDecoration(
+                                          color: SaharaColors.gold,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Text(
+                                          count > 9 ? '9+' : '$count',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: SaharaColors.black,
+                                            height: 1,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          )
+                        else
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(
+                              isSelected ? tabs[i].activeIcon : tabs[i].icon,
+                              key: ValueKey(isSelected),
+                              size: 22,
+                              color: isSelected
+                                  ? SaharaColors.gold
+                                  : SaharaColors.grayText.withValues(alpha: 0.6),
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 4),
                         Text(
                           tabs[i].label,
@@ -155,44 +207,3 @@ class _TabItem {
   });
 }
 
-// ── Placeholder para tabs sin implementar ────────────────────────────────────
-
-class _PlaceholderTab extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _PlaceholderTab({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: SaharaGradients.backgroundMain),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: SaharaColors.gold.withValues(alpha: 0.4), size: 40),
-            const SizedBox(height: 16),
-            Text(
-              label,
-              style: GoogleFonts.playfairDisplay(
-                fontSize: 20,
-                color: SaharaColors.gold.withValues(alpha: 0.5),
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Próximamente',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: SaharaColors.grayText.withValues(alpha: 0.5),
-                letterSpacing: 1,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

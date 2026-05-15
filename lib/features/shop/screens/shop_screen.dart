@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
+import 'package:sahara_club_spa_app/features/shop/controllers/shop_cart_controller.dart';
+import 'package:sahara_club_spa_app/features/shop/models/cart_item.dart';
+import 'package:sahara_club_spa_app/features/shop/screens/cart_screen.dart';
 import 'package:sahara_club_spa_app/features/shop/screens/product_detail_screen.dart';
 import 'package:sahara_club_spa_app/features/shop/widgets/product_card.dart';
 
@@ -109,31 +112,97 @@ class _ShopScreenState extends State<ShopScreen>
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('TIENDA', style: GoogleFonts.inter(
-            fontSize: 10, color: SaharaColors.gold,
-            fontWeight: FontWeight.w700, letterSpacing: 3,
-          )),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(children: [
-              TextSpan(
-                text: 'Seleccionado\n',
-                style: GoogleFonts.playfairDisplay(
-                  fontSize: 28, color: SaharaColors.whiteSoft,
-                  fontWeight: FontWeight.w300, height: 1.1,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('TIENDA', style: GoogleFonts.inter(
+                  fontSize: 10, color: SaharaColors.gold,
+                  fontWeight: FontWeight.w700, letterSpacing: 3,
+                )),
+                const SizedBox(height: 8),
+                RichText(
+                  text: TextSpan(children: [
+                    TextSpan(
+                      text: 'Seleccionado\n',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 28, color: SaharaColors.whiteSoft,
+                        fontWeight: FontWeight.w300, height: 1.1,
+                      ),
+                    ),
+                    TextSpan(
+                      text: 'para tu ritual',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 28, color: SaharaColors.gold,
+                        fontWeight: FontWeight.w400, fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ]),
                 ),
-              ),
-              TextSpan(
-                text: 'para tu ritual',
-                style: GoogleFonts.playfairDisplay(
-                  fontSize: 28, color: SaharaColors.gold,
-                  fontWeight: FontWeight.w400, fontStyle: FontStyle.italic,
+              ],
+            ),
+          ),
+          ValueListenableBuilder<List<CartItem>>(
+            valueListenable: ShopCartController.instance,
+            builder: (context, items, _) {
+              final count = ShopCartController.instance.itemCount;
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CartScreen()),
                 ),
-              ),
-            ]),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(
+                        color: SaharaColors.grayDark,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: count > 0
+                              ? SaharaColors.gold.withValues(alpha: 0.4)
+                              : Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 19,
+                        color: count > 0
+                            ? SaharaColors.gold
+                            : SaharaColors.grayText.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    if (count > 0)
+                      Positioned(
+                        right: -4, top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          constraints: const BoxConstraints(
+                              minWidth: 17, minHeight: 17),
+                          decoration: const BoxDecoration(
+                            color: SaharaColors.gold,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            count > 9 ? '9+' : '$count',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: SaharaColors.black,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
