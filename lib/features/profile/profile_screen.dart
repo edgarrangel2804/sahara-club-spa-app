@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
+import 'package:sahara_club_spa_app/features/memberships/memberships_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -80,7 +81,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       _nameCtrl.text  = profile['full_name'] as String? ?? '';
       _phoneCtrl.text = profile['phone'] as String? ?? '';
       _avatarUrl      = profile['avatar_url'] as String?;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ProfileScreen._loadData profiles: $e');
+    }
 
     try {
       final cp = await _db
@@ -96,7 +99,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       _pressure   = cp['preferred_pressure']  as String? ?? '';
       _schedule   = cp['preferred_schedule']  as String? ?? '';
       _notesCtrl.text = cp['notes'] as String? ?? '';
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ProfileScreen._loadData client_profiles: $e');
+    }
 
     if (mounted) setState(() => _loading = false);
   }
@@ -442,7 +447,71 @@ class _ProfileScreenState extends State<ProfileScreen>
             inputType: TextInputType.phone),
         const SizedBox(height: 14),
         _readonlyField(label: 'Correo electrónico', value: _email, icon: Icons.mail_outline),
+        const SizedBox(height: 32),
+        _buildMembershipBanner(),
+        const SizedBox(height: 16),
       ],
+    );
+  }
+
+  Widget _buildMembershipBanner() {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MembershipsScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A1200), Color(0xFF0E0C00)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: SaharaColors.gold.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: SaharaColors.gold.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: SaharaColors.gold.withValues(alpha: 0.3)),
+              ),
+              child: const Icon(Icons.workspace_premium_rounded,
+                  color: SaharaColors.gold, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Membresía Elite',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 15,
+                        color: SaharaColors.whiteSoft,
+                        fontWeight: FontWeight.w400,
+                      )),
+                  const SizedBox(height: 2),
+                  Text('Oasis Plata · Duna Dorada · Sahara Black',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: SaharaColors.gold.withValues(alpha: 0.6),
+                        letterSpacing: 0.3,
+                      )),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: SaharaColors.gold.withValues(alpha: 0.5), size: 20),
+          ],
+        ),
+      ),
     );
   }
 
