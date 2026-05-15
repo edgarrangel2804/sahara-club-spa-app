@@ -310,11 +310,25 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  void _showForgotPassword() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0E0E0E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _ForgotPasswordSheet(
+        initialEmail: _emailCtrl.text.trim(),
+      ),
+    );
+  }
+
   Widget _buildFooterLinks() {
     return Column(
       children: [
         GestureDetector(
-          onTap: () {},
+          onTap: _showForgotPassword,
           child: Text(
             '¿Olvidaste tu contraseña?',
             style: GoogleFonts.inter(
@@ -487,6 +501,136 @@ class _GoogleIcon extends StatelessWidget {
     );
   }
 }
+
+// ── Forgot password bottom sheet ─────────────────────────────────────────────
+
+class _ForgotPasswordSheet extends StatefulWidget {
+  final String initialEmail;
+  const _ForgotPasswordSheet({this.initialEmail = ''});
+
+  @override
+  State<_ForgotPasswordSheet> createState() => _ForgotPasswordSheetState();
+}
+
+class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
+  late final _ctrl = TextEditingController(text: widget.initialEmail);
+  bool _loading = false;
+  bool _sent    = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final email = _ctrl.text.trim();
+    if (email.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      await AuthService().resetPassword(email);
+      if (mounted) setState(() { _sent = true; _loading = false; });
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message,
+              style: GoogleFonts.inter(color: SaharaColors.whiteSoft)),
+          backgroundColor: SaharaColors.grayDark,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: SaharaColors.grayDark,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text('Recuperar contraseña',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 22, color: SaharaColors.whiteSoft,
+              fontWeight: FontWeight.w400,
+            )),
+          const SizedBox(height: 8),
+          if (!_sent) ...[
+            Text(
+              'Te enviaremos un enlace para restablecer tu contraseña.',
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: SaharaColors.grayText, height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            SaharaInput(
+              label: 'Correo electrónico',
+              hint: 'correo@ejemplo.com',
+              prefixIcon: Icons.mail_outline,
+              controller: _ctrl,
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 24),
+            SaharaButton(
+              text: 'ENVIAR ENLACE',
+              onPressed: _send,
+              isLoading: _loading,
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: SaharaColors.gold.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: SaharaColors.gold.withValues(alpha: 0.2)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.check_circle_outline_rounded,
+                    color: SaharaColors.gold, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Revisa tu correo. Si la cuenta existe, recibirás el enlace en unos minutos.',
+                    style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: SaharaColors.whiteSoft,
+                        height: 1.5),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cerrar',
+                    style: GoogleFonts.inter(
+                        color: SaharaColors.grayText, fontSize: 14)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Facebook icon ─────────────────────────────────────────────────────────────
 
 class _FacebookIcon extends StatelessWidget {
   const _FacebookIcon();

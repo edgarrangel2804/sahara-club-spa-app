@@ -29,10 +29,10 @@ serve(async (req) => {
     const { data: booking, error: bookingErr } = await supabase
       .from('bookings')
       .select(`
-        id, booking_date, booking_time,
+        id, booking_date, booking_time, therapist_id,
         services(name),
         client:profiles!bookings_client_id_fkey(id, full_name, fcm_token),
-        therapist:profiles!bookings_therapist_id_fkey(id, full_name, fcm_token)
+        therapist:staff!bookings_therapist_id_fkey(id, full_name)
       `)
       .eq('id', booking_id)
       .single();
@@ -108,7 +108,22 @@ serve(async (req) => {
     // ── CASO 3: terapeuta asignado → notificar al terapeuta ──────────────────
     else if (type === 'therapist_assigned') {
       const therapist = booking.therapist as any;
-      if (!therapist?.fcm_token) {
+      const therapistId = therapist?.id ?? (booking as any).therapist_id;
+      if (!therapistId) {
+        return new Response(
+          JSON.stringify({ sent: 0, message: 'Cita sin terapeuta asignado' }),
+          { status: 200 },
+        );
+      }
+
+      // FCM token is stored in profiles (therapists with a mobile app account).
+      const { data: therapistProfile } = await supabase
+        .from('profiles')
+        .select('fcm_token')
+        .eq('id', therapistId)
+        .maybeSingle();
+
+      if (!therapistProfile?.fcm_token) {
         return new Response(
           JSON.stringify({ sent: 0, message: 'Terapeuta sin token FCM registrado' }),
           { status: 200 },
@@ -118,13 +133,13 @@ serve(async (req) => {
       const title = '📋 Nueva cita asignada — Sahara Club Spa';
       const body  = `${clientName} · ${serviceName} · ${dateLabel} a las ${timeLabel}`;
 
-      const ok = await sendFcm(accessToken, therapist.fcm_token, title, body, {
+      const ok = await sendFcm(accessToken, therapistProfile.fcm_token, title, body, {
         type: 'therapist_assigned',
         booking_id,
       });
       if (ok) {
         sent++;
-        await logNotification(therapist.id, booking_id, type, title, body);
+        await logNotification(therapistId, booking_id, type, title, body);
       }
     } else {
       return new Response(JSON.stringify({ error: 'type inválido' }), { status: 400 });

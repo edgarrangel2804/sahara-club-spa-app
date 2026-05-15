@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
+import 'package:sahara_club_spa_app/features/client/pages/client_messages_page.dart';
 
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
@@ -18,42 +19,68 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
   final _db = Supabase.instance.client;
   List<Map<String, dynamic>> _bookings = [];
   bool _loading = true;
+  String? _error;
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     _load();
+    _subscribeRealtime();
   }
 
   @override
   void dispose() {
     _tab.dispose();
+    if (_channel != null) _db.removeChannel(_channel!);
     super.dispose();
+  }
+
+  void _subscribeRealtime() {
+    final user = AuthService().currentUser;
+    if (user == null) return;
+    _channel = _db
+        .channel('my-bookings-${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'bookings',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'client_id',
+            value: user.id,
+          ),
+          callback: (_) { if (mounted) _load(); },
+        )
+        .subscribe();
   }
 
   Future<void> _load() async {
     final user = AuthService().currentUser;
     if (user == null) return;
-    setState(() => _loading = true);
+    setState(() { _loading = true; _error = null; });
     try {
       final raw = await _db
           .from('bookings')
           .select('''
             id, booking_date, booking_time, duration_min, status, price, client_notes,
             services(name, category),
-            therapists:profiles!bookings_therapist_id_fkey(full_name)
+            therapists:staff!bookings_therapist_id_fkey(full_name)
           ''')
           .eq('client_id', user.id)
           .order('booking_date', ascending: false)
           .order('booking_time', ascending: false);
       if (mounted) setState(() => _bookings = (raw as List).cast());
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('MyBookingsScreen._load: $e');
+      if (mounted) setState(() => _error = 'No se pudieron cargar tus citas.');
+    }
     if (mounted) setState(() => _loading = false);
   }
 
   List<Map<String, dynamic>> get _upcoming => _bookings
-      .where((b) => !['completed', 'cancelled', 'no_show'].contains(b['status']))
+      .where((b) => !['completed', 'cancelled', 'no_show', 'paid'].contains(b['status']))
       .toList();
 
   List<Map<String, dynamic>> get _past => _bookings
@@ -103,7 +130,32 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                   child: _loading
                       ? const Center(child: CircularProgressIndicator(
                           color: SaharaColors.gold, strokeWidth: 1.5))
-                      : TabBarView(
+                      : _error != null
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.wifi_off_rounded,
+                                      color: SaharaColors.grayText
+                                          .withValues(alpha: 0.25),
+                                      size: 44),
+                                  const SizedBox(height: 14),
+                                  Text(_error!,
+                                      style: GoogleFonts.inter(
+                                          fontSize: 14,
+                                          color: SaharaColors.grayText
+                                              .withValues(alpha: 0.5))),
+                                  const SizedBox(height: 16),
+                                  TextButton(
+                                    onPressed: _load,
+                                    child: Text('Reintentar',
+                                        style: GoogleFonts.inter(
+                                            color: SaharaColors.gold)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : TabBarView(
                           controller: _tab,
                           children: [
                             _BookingsList(
@@ -111,6 +163,13 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
                               emptyLabel: 'Sin citas próximas',
                               emptyIcon: Icons.calendar_today_outlined,
                               onRefresh: _load,
+                              allowCancel: true,
+                              onContactReception: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ClientMessagesPage(),
+                                ),
+                              ),
                             ),
                             _BookingsList(
                               bookings: _past,
@@ -137,12 +196,16 @@ class _BookingsList extends StatelessWidget {
   final String emptyLabel;
   final IconData emptyIcon;
   final VoidCallback onRefresh;
+  final VoidCallback? onContactReception;
+  final bool allowCancel;
 
   const _BookingsList({
     required this.bookings,
     required this.emptyLabel,
     required this.emptyIcon,
     required this.onRefresh,
+    this.onContactReception,
+    this.allowCancel = false,
   });
 
   @override
@@ -170,7 +233,11 @@ class _BookingsList extends StatelessWidget {
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(22, 0, 22, 40),
         itemCount: bookings.length,
-        itemBuilder: (_, i) => _BookingCard(booking: bookings[i]),
+        itemBuilder: (_, i) => _BookingCard(
+          booking: bookings[i],
+          onContactReception: onContactReception,
+          onRefresh: allowCancel ? onRefresh : null,
+        ),
       ),
     );
   }
@@ -178,44 +245,123 @@ class _BookingsList extends StatelessWidget {
 
 // ── Tarjeta de cita ───────────────────────────────────────────────────────────
 
-class _BookingCard extends StatelessWidget {
+class _BookingCard extends StatefulWidget {
   final Map<String, dynamic> booking;
-  const _BookingCard({required this.booking});
+  final VoidCallback? onContactReception;
+  final VoidCallback? onRefresh;
+  const _BookingCard({required this.booking, this.onContactReception, this.onRefresh});
+
+  @override
+  State<_BookingCard> createState() => _BookingCardState();
+}
+
+class _BookingCardState extends State<_BookingCard> {
+  bool _cancelling = false;
+
+  static const _cancellableStatuses = {'scheduled', 'confirmed', 'rescheduled'};
+
+  Future<void> _confirmCancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF111111),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('¿Cancelar cita?',
+            style: GoogleFonts.playfairDisplay(
+                fontSize: 18, color: SaharaColors.whiteSoft)),
+        content: Text(
+          'Esta acción no se puede deshacer. Si necesitas reagendar, contacta a recepción.',
+          style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.grayText, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Volver',
+                style: GoogleFonts.inter(color: SaharaColors.grayText)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Cancelar cita',
+                style: GoogleFonts.inter(
+                    color: const Color(0xFFEF5350),
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancelling = true);
+    try {
+      await Supabase.instance.client
+          .from('bookings')
+          .update({'status': 'cancelled'})
+          .eq('id', widget.booking['id'] as String);
+      if (mounted) widget.onRefresh?.call();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo cancelar: $e',
+              style: GoogleFonts.inter(color: SaharaColors.whiteSoft)),
+          backgroundColor: SaharaColors.grayDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
+        setState(() => _cancelling = false);
+      }
+    }
+  }
 
   static Color _statusColor(String status) => switch (status) {
     'confirmed'  => const Color(0xFF4CAF50),
+    'checked_in' => const Color(0xFF2088D8),
+    'in_progress' => const Color(0xFF6A54E0),
     'completed'  => const Color(0xFF64B5F6),
+    'awaiting_payment' => const Color(0xFFB06A1F),
+    'paid'       => const Color(0xFF0E8F55),
     'cancelled'  => const Color(0xFFEF5350),
+    'rescheduled' => const Color(0xFF0A9AA4),
     'no_show'    => const Color(0xFFFF7043),
     _            => const Color(0xFFFFB74D),
   };
 
   static String _statusLabel(String status) => switch (status) {
     'confirmed'  => 'Confirmada',
+    'checked_in' => 'Check-in',
+    'in_progress' => 'En proceso',
     'completed'  => 'Completada',
+    'awaiting_payment' => 'Pendiente de cobro',
+    'paid'       => 'Pagada',
     'cancelled'  => 'Cancelada',
+    'rescheduled' => 'Reagendada',
     'no_show'    => 'No asistí',
     _            => 'Pendiente',
   };
 
   static IconData _statusIcon(String status) => switch (status) {
     'confirmed'  => Icons.check_circle_outline,
+    'checked_in' => Icons.login_rounded,
+    'in_progress' => Icons.spa_rounded,
     'completed'  => Icons.done_all_rounded,
+    'awaiting_payment' => Icons.payments_outlined,
+    'paid'       => Icons.paid_outlined,
     'cancelled'  => Icons.cancel_outlined,
+    'rescheduled' => Icons.event_repeat_outlined,
     'no_show'    => Icons.event_busy_outlined,
     _            => Icons.schedule_rounded,
   };
 
   @override
   Widget build(BuildContext context) {
-    final status     = booking['status'] as String? ?? 'scheduled';
-    final color      = _statusColor(status);
-    final dateStr    = booking['booking_date'] as String? ?? '';
-    final timeStr    = booking['booking_time'] as String? ?? '';
-    final serviceName = (booking['services'] as Map?)?['name'] as String? ?? '—';
-    final therapist  = (booking['therapists'] as Map?)?['full_name'] as String?;
-    final price      = (booking['price'] as num?)?.toDouble() ?? 0;
-    final notes      = booking['client_notes'] as String?;
+    final status      = widget.booking['status'] as String? ?? 'scheduled';
+    final color       = _statusColor(status);
+    final dateStr     = widget.booking['booking_date'] as String? ?? '';
+    final timeStr     = widget.booking['booking_time'] as String? ?? '';
+    final serviceName = (widget.booking['services'] as Map?)?['name'] as String? ?? '—';
+    final therapist   = (widget.booking['therapists'] as Map?)?['full_name'] as String?;
+    final price       = (widget.booking['price'] as num?)?.toDouble() ?? 0;
+    final notes       = widget.booking['client_notes'] as String?;
+    final canCancel   = widget.onRefresh != null && _cancellableStatuses.contains(status);
 
     DateTime? date;
     try { date = DateTime.parse(dateStr); } catch (_) {}
@@ -295,6 +441,66 @@ class _BookingCard extends StatelessWidget {
                     fontSize: 12, color: SaharaColors.grayText.withValues(alpha: 0.6),
                     fontStyle: FontStyle.italic,
                   ), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+                if (widget.onContactReception != null || canCancel) ...[
+                  const SizedBox(height: 14),
+                  Divider(color: SaharaColors.gold.withValues(alpha: 0.1), height: 1),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (widget.onContactReception != null)
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: widget.onContactReception,
+                            behavior: HitTestBehavior.opaque,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.chat_bubble_outline_rounded,
+                                  size: 13,
+                                  color: SaharaColors.gold.withValues(alpha: 0.65),
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text('¿Necesitas cambiar esta cita? Contactar recepción',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      color: SaharaColors.gold.withValues(alpha: 0.65),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (canCancel) ...[
+                        if (widget.onContactReception != null) const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _cancelling ? null : _confirmCancel,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF5350).withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFEF5350).withValues(alpha: 0.3)),
+                            ),
+                            child: _cancelling
+                                ? const SizedBox(
+                                    width: 12, height: 12,
+                                    child: CircularProgressIndicator(
+                                        color: Color(0xFFEF5350), strokeWidth: 1.5))
+                                : Text('Cancelar',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      color: const Color(0xFFEF5350),
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ],
             ),

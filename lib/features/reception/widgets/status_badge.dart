@@ -7,9 +7,15 @@ class StatusBadge extends StatelessWidget {
   const StatusBadge({super.key, required this.status});
 
   static Color colorFor(BookingStatus s) => switch (s) {
+    BookingStatus.pending => const Color(0xFFFFB74D),
     BookingStatus.confirmed => const Color(0xFF4CAF50),
+    BookingStatus.checkedIn => const Color(0xFF2088D8),
+    BookingStatus.inProgress => const Color(0xFF6A54E0),
     BookingStatus.completed => const Color(0xFF64B5F6),
+    BookingStatus.awaitingPayment => const Color(0xFFB06A1F),
+    BookingStatus.paid => const Color(0xFF0E8F55),
     BookingStatus.cancelled => const Color(0xFFEF5350),
+    BookingStatus.rescheduled => const Color(0xFF0A9AA4),
     BookingStatus.noShow    => const Color(0xFFFF7043),
     BookingStatus.scheduled => const Color(0xFFFFB74D),
   };

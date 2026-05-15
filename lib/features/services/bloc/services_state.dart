@@ -9,6 +9,15 @@ abstract class ServicesState extends Equatable {
 
 class ServicesInitial extends ServicesState {}
 
+class ServicesLoading extends ServicesState {}
+
+class ServicesError extends ServicesState {
+  final String message;
+  const ServicesError({required this.message});
+  @override
+  List<Object?> get props => [message];
+}
+
 class ServicesLoaded extends ServicesState {
   final List<SpaService> all;
   final List<SpaService> filtered;

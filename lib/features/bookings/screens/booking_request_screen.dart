@@ -26,7 +26,7 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
   ServiceDuration? _selectedDuration;
   bool _sending = false;
   List<Map<String, dynamic>> _therapists = [];
-  String? _serviceDbId;
+  Set<String> _occupiedSlots = {};
 
   static final _timeSlots = List.generate(21, (i) {
     final totalMin = 540 + i * 30; // 9:00 → 19:30
@@ -52,18 +52,47 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
 
   Future<void> _loadTherapists() async {
     try {
-      final results = await Future.wait([
-        _db.from('profiles').select('id, full_name, specialty')
-            .eq('role', 'therapist').eq('is_active', true).order('full_name'),
-        _db.from('services').select('id').eq('name', widget.service.name).limit(1),
-      ]);
-      if (mounted) {
-        _therapists = (results[0] as List).cast();
-        final serviceRows = results[1] as List;
-        _serviceDbId = serviceRows.isNotEmpty ? serviceRows.first['id'] as String? : null;
-        setState(() {});
+      final rows = await _db
+          .from('profiles')
+          .select('id, full_name')
+          .eq('role', 'therapist')
+          .not('is_active', 'eq', false)
+          .order('full_name');
+      if (mounted) setState(() => _therapists = (rows as List).cast());
+    } catch (e) {
+      debugPrint('BookingRequest._loadTherapists: $e');
+    }
+  }
+
+  Future<void> _loadOccupiedSlots() async {
+    if (_selectedTherapistId == null) {
+      setState(() => _occupiedSlots = {});
+      return;
+    }
+    try {
+      final rows = await _db
+          .from('bookings')
+          .select('booking_time')
+          .eq('therapist_id', _selectedTherapistId!)
+          .eq('booking_date', DateFormat('yyyy-MM-dd').format(_selectedDate))
+          .neq('status', 'cancelled')
+          .neq('status', 'no_show');
+      final occupied = <String>{};
+      for (final r in rows as List) {
+        final t = (r['booking_time'] as String?)?.substring(0, 5);
+        if (t != null) occupied.add(t);
       }
-    } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _occupiedSlots = occupied;
+          if (_selectedTime != null && occupied.contains(_selectedTime)) {
+            _selectedTime = null;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('BookingRequest._loadOccupiedSlots: $e');
+    }
   }
 
   Future<void> _sendRequest() async {
@@ -76,11 +105,39 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
     if (user == null) return;
 
     setState(() => _sending = true);
+
+    // Verificar disponibilidad si se eligió terapeuta específica
+    if (_selectedTherapistId != null) {
+      try {
+        final rows = await _db
+            .from('bookings')
+            .select('id')
+            .eq('therapist_id', _selectedTherapistId!)
+            .eq('booking_date', DateFormat('yyyy-MM-dd').format(_selectedDate))
+            .neq('status', 'cancelled')
+            .neq('status', 'no_show');
+        final conflict = (rows as List).any((r) =>
+            (r['booking_time'] as String?)?.startsWith(_selectedTime!) == true);
+        if (conflict) {
+          if (mounted) {
+            _showSnack(
+              'Esa terapeuta ya tiene una cita a esa hora. Elige otro horario o selecciona "Sin preferencia".',
+              isError: true,
+            );
+            setState(() { _sending = false; _occupiedSlots = {..._occupiedSlots, _selectedTime!}; _selectedTime = null; });
+          }
+          return;
+        }
+      } catch (e) {
+        debugPrint('BookingRequest._sendRequest conflict check: $e');
+      }
+    }
+
     try {
       await _db.from('bookings').insert({
         'client_id':    user.id,
         'therapist_id': _selectedTherapistId,
-        'service_id':   _serviceDbId,
+        'service_id':   _selectedDuration?.serviceId ?? widget.service.id,
         'service_name': widget.service.name,
         'booking_date': DateFormat('yyyy-MM-dd').format(_selectedDate),
         'booking_time': '${_selectedTime!}:00',
@@ -290,6 +347,7 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
             onTap: () {
               HapticFeedback.selectionClick();
               setState(() => _selectedDate = d);
+              _loadOccupiedSlots();
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
@@ -359,8 +417,9 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       runSpacing: 10,
       children: _timeSlots.map((t) {
         final isSelected = t == _selectedTime;
+        final isOccupied = _occupiedSlots.contains(t);
         return GestureDetector(
-          onTap: () {
+          onTap: isOccupied ? null : () {
             HapticFeedback.selectionClick();
             setState(() => _selectedTime = isSelected ? null : t);
           },
@@ -368,22 +427,37 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: isSelected
-                  ? SaharaColors.gold.withValues(alpha: 0.15)
-                  : const Color(0xFF111111),
+              color: isOccupied
+                  ? const Color(0xFF0A0A0A)
+                  : isSelected
+                      ? SaharaColors.gold.withValues(alpha: 0.15)
+                      : const Color(0xFF111111),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected
-                    ? SaharaColors.gold.withValues(alpha: 0.7)
-                    : const Color(0xFF222222),
+                color: isOccupied
+                    ? const Color(0xFF1A1A1A)
+                    : isSelected
+                        ? SaharaColors.gold.withValues(alpha: 0.7)
+                        : const Color(0xFF222222),
                 width: isSelected ? 1.5 : 1,
               ),
             ),
-            child: Text(t, style: GoogleFonts.inter(
-              fontSize: 13,
-              color: isSelected ? SaharaColors.gold : SaharaColors.grayText,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            )),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(t, style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: isOccupied
+                      ? SaharaColors.grayText.withValues(alpha: 0.25)
+                      : isSelected
+                          ? SaharaColors.gold
+                          : SaharaColors.grayText,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  decoration: isOccupied ? TextDecoration.lineThrough : null,
+                  decorationColor: SaharaColors.grayText.withValues(alpha: 0.25),
+                )),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -449,7 +523,7 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
           if (i == 0) {
             final isSelected = _selectedTherapistId == null;
             return GestureDetector(
-              onTap: () => setState(() => _selectedTherapistId = null),
+              onTap: () { setState(() => _selectedTherapistId = null); _loadOccupiedSlots(); },
               child: _TherapistChip(
                 initials: '✦',
                 name: 'Sin preferencia',
@@ -471,6 +545,7 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
             onTap: () {
               HapticFeedback.selectionClick();
               setState(() => _selectedTherapistId = isSelected ? null : id);
+              _loadOccupiedSlots();
             },
             child: _TherapistChip(
               initials: initials,

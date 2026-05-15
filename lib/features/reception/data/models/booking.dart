@@ -59,16 +59,28 @@ class Booking {
 
 enum BookingStatus {
   scheduled,
+  pending,
   confirmed,
+  checkedIn,
+  inProgress,
   completed,
+  awaitingPayment,
+  paid,
   cancelled,
+  rescheduled,
   noShow;
 
   static BookingStatus fromString(String? s) {
     return switch (s) {
+      'pending'    => pending,
       'confirmed'  => confirmed,
+      'checked_in' => checkedIn,
+      'in_progress' => inProgress,
       'completed'  => completed,
+      'awaiting_payment' => awaitingPayment,
+      'paid'       => paid,
       'cancelled'  => cancelled,
+      'rescheduled' => rescheduled,
       'no_show'    => noShow,
       _            => scheduled,
     };
@@ -76,17 +88,29 @@ enum BookingStatus {
 
   String get value => switch (this) {
     scheduled  => 'scheduled',
+    pending    => 'pending',
     confirmed  => 'confirmed',
+    checkedIn  => 'checked_in',
+    inProgress => 'in_progress',
     completed  => 'completed',
+    awaitingPayment => 'awaiting_payment',
+    paid       => 'paid',
     cancelled  => 'cancelled',
+    rescheduled => 'rescheduled',
     noShow     => 'no_show',
   };
 
   String get label => switch (this) {
     scheduled  => 'Agendada',
+    pending    => 'Pendiente',
     confirmed  => 'Confirmada',
+    checkedIn  => 'Check-in',
+    inProgress => 'En proceso',
     completed  => 'Completada',
+    awaitingPayment => 'Pendiente de cobro',
+    paid       => 'Pagada',
     cancelled  => 'Cancelada',
+    rescheduled => 'Reagendada',
     noShow     => 'No asistió',
   };
 }

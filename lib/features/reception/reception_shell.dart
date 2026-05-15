@@ -11,6 +11,7 @@ import 'package:sahara_club_spa_app/features/reception/pages/reception_agenda_pa
 import 'package:sahara_club_spa_app/features/reception/pages/reception_clients_page.dart';
 import 'package:sahara_club_spa_app/features/reception/pages/reception_caja_page.dart';
 import 'package:sahara_club_spa_app/features/reception/pages/reception_messages_page.dart';
+import 'package:sahara_club_spa_app/features/reception/pages/reception_qr_scanner_page.dart';
 
 class ReceptionShell extends StatefulWidget {
   const ReceptionShell({super.key});
@@ -93,6 +94,7 @@ class _ReceptionShellState extends State<ReceptionShell> {
     const _NavItem(icon: Icons.chat_bubble_outline,     activeIcon: Icons.chat_bubble_rounded,    label: 'Mensajes'),
     if (_permissions.contains('ver_caja'))
       const _NavItem(icon: Icons.point_of_sale_outlined, activeIcon: Icons.point_of_sale,         label: 'Caja'),
+    const _NavItem(icon: Icons.qr_code_scanner_outlined, activeIcon: Icons.qr_code_scanner_rounded, label: 'Escanear'),
   ];
 
   List<Widget> _buildPages() => [
@@ -103,6 +105,7 @@ class _ReceptionShellState extends State<ReceptionShell> {
     ReceptionMessagesPage(repo: _repo),
     if (_permissions.contains('ver_caja'))
       ReceptionCajaPage(repo: _repo),
+    const ReceptionQrScannerPage(),
   ];
 
   @override

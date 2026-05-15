@@ -152,6 +152,21 @@ class AuthService {
     }
   }
 
+  // ── Reset password ──────────────────────────────────────────────────────────
+
+  Future<void> resetPassword(String email) async {
+    try {
+      await _client.auth.resetPasswordForEmail(email.trim());
+    } on sb.AuthApiException catch (e) {
+      throw AppAuthException(_mapError(e.message));
+    } on sb.AuthException catch (e) {
+      throw AppAuthException(_mapError(e.message));
+    } catch (e) {
+      debugPrint('AuthService.resetPassword error: $e');
+      throw const AppAuthException('Error al enviar el correo. Intenta de nuevo.');
+    }
+  }
+
   Future<void> saveDeviceToken([String? token]) async {
     if (currentUser == null || token == null) return;
     try {

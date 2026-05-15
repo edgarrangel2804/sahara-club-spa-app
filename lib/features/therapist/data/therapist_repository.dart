@@ -27,7 +27,7 @@ class TherapistRepository {
           .select('''
             *,
             clients:profiles!bookings_client_id_fkey(full_name),
-            therapists:profiles!bookings_therapist_id_fkey(full_name),
+            therapists:staff!bookings_therapist_id_fkey(full_name),
             services(name)
           ''')
           .eq('therapist_id', _myId)

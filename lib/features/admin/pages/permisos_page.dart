@@ -5,10 +5,18 @@ import 'package:sahara_club_spa_app/features/admin/data/admin_repository.dart';
 
 // Permiso key → etiqueta, descripción, ícono
 const _kPerms = [
-  (key: 'ver_caja',       label: 'Ver Caja',        desc: 'Acceso a cobros del día',     icon: Icons.point_of_sale_outlined),
-  (key: 'ver_gastos',     label: 'Registrar Gastos', desc: 'Puede registrar gastos',      icon: Icons.receipt_long_outlined),
-  (key: 'ver_clientes',   label: 'Ver Clientes',     desc: 'Acceso al directorio',        icon: Icons.people_outline),
-  (key: 'cancelar_citas', label: 'Cancelar Citas',   desc: 'Puede cancelar reservas',     icon: Icons.cancel_outlined),
+  // Agenda
+  (key: 'crear_citas',      label: 'Crear Citas',         desc: 'Puede crear nuevas reservas',        icon: Icons.add_circle_outline),
+  (key: 'cancelar_citas',   label: 'Cancelar Citas',      desc: 'Puede cancelar reservas',            icon: Icons.cancel_outlined),
+  (key: 'asignar_terapeuta',label: 'Asignar Terapeuta',   desc: 'Puede asignar terapeutas a citas',   icon: Icons.person_pin_outlined),
+  // Clientes
+  (key: 'ver_clientes',     label: 'Ver Clientes',        desc: 'Acceso al directorio de clientes',   icon: Icons.people_outline),
+  (key: 'crear_clientes',   label: 'Crear Clientes',      desc: 'Puede registrar nuevos clientes',    icon: Icons.person_add_outlined),
+  // Caja y gastos
+  (key: 'ver_caja',         label: 'Ver Caja',            desc: 'Acceso a cobros del día',            icon: Icons.point_of_sale_outlined),
+  (key: 'ver_gastos',       label: 'Registrar Gastos',    desc: 'Puede registrar gastos del día',     icon: Icons.receipt_long_outlined),
+  // Mensajes
+  (key: 'ver_mensajes',     label: 'Ver Mensajes',        desc: 'Acceso al chat interno',             icon: Icons.chat_outlined),
 ];
 
 class AdminPermisosPage extends StatefulWidget {
@@ -365,7 +373,9 @@ class _ReceptionistPerms {
   _ReceptionistPerms({required this.id, required this.name, required this.permissions});
 
   static final _defaultPerms = {
-    'ver_caja', 'ver_gastos', 'ver_clientes', 'cancelar_citas',
+    'crear_citas', 'cancelar_citas', 'asignar_terapeuta',
+    'ver_clientes', 'crear_clientes',
+    'ver_caja', 'ver_gastos', 'ver_mensajes',
   };
 
   factory _ReceptionistPerms.fromMap(Map<String, dynamic> m) {

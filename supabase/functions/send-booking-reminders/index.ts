@@ -11,6 +11,7 @@ const SERVICE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // JSON completo de la cuenta de servicio de Firebase (como string)
 const SA_JSON       = Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!;
 const PROJECT_ID    = 'sahara-club-spa';
+const BUSINESS_TIME_ZONE = 'America/Tijuana';
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -22,26 +23,33 @@ serve(async (req) => {
     let bookings: any[] = [];
 
     if (type === 'day_before') {
+      if (formatHourForQuery(now) !== '20') {
+        return new Response(JSON.stringify({
+          sent: 0,
+          bookings: 0,
+          skipped: true,
+          reason: 'outside_day_before_window',
+        }), { status: 200 });
+      }
+
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const dateStr = tomorrow.toISOString().split('T')[0];
+      const dateStr = formatDateForQuery(tomorrow);
 
       const { data, error } = await supabase
         .from('bookings')
         .select(`id, booking_date, booking_time, service_name, services(name),
                  client:profiles!bookings_client_id_fkey(id, full_name)`)
         .eq('booking_date', dateStr)
-        .in('status', ['scheduled', 'confirmed']);
+        .eq('status', 'confirmed');
 
       if (error) throw error;
       bookings = data ?? [];
 
     } else if (type === 'two_hours') {
       const target = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      const dateStr = target.toISOString().split('T')[0];
-      const hh = String(target.getUTCHours()).padStart(2, '0');
-      const mm = String(target.getUTCMinutes()).padStart(2, '0');
-      const timeStr = `${hh}:${mm}:00`;
+      const dateStr = formatDateForQuery(target);
+      const timeStr = `${formatTimeForQuery(target)}:00`;
 
       const { data, error } = await supabase
         .from('bookings')
@@ -49,7 +57,7 @@ serve(async (req) => {
                  client:profiles!bookings_client_id_fkey(id, full_name)`)
         .eq('booking_date', dateStr)
         .eq('booking_time', timeStr)
-        .in('status', ['scheduled', 'confirmed']);
+        .eq('status', 'confirmed');
 
       if (error) throw error;
       bookings = data ?? [];
@@ -67,6 +75,16 @@ serve(async (req) => {
     for (const booking of bookings) {
       const clientId = booking.client?.id;
       if (!clientId) continue;
+
+      const { data: existingLog } = await supabase
+        .from('notification_log')
+        .select('id')
+        .eq('booking_id', booking.id)
+        .eq('type', type)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingLog != null) continue;
 
       const serviceName = booking.services?.name ?? booking.service_name ?? 'tu cita';
       const dateLabel   = formatDate(booking.booking_date);
@@ -224,4 +242,54 @@ function formatDate(dateStr: string): string {
   const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const [, month, day] = dateStr.split('-').map(Number);
   return `${day} de ${months[month - 1]}`;
+}
+
+function formatDateForQuery(date: Date): string {
+  return formatInTimeZone(date, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
+function formatTimeForQuery(date: Date): string {
+  return formatInTimeZone(date, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatHourForQuery(date: Date): string {
+  return formatInTimeZone(date, {
+    hour: '2-digit',
+  });
+}
+
+function formatInTimeZone(
+  date: Date,
+  options: {
+    year?: 'numeric';
+    month?: '2-digit';
+    day?: '2-digit';
+    hour?: '2-digit';
+    minute?: '2-digit';
+  },
+): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    ...options,
+    hourCycle: 'h23',
+    timeZone: BUSINESS_TIME_ZONE,
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  ) as Record<string, string>;
+
+  if (options.year && options.month && options.day) {
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+
+  return `${values.hour}:${values.minute}`;
 }

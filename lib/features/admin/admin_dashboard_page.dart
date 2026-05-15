@@ -58,7 +58,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           .eq('id', user.id)
           .single();
       if (mounted) setState(() => _profile = UserProfile.fromMap(data));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AdminDashboard._loadProfile: $e');
+    }
   }
 
   Future<void> _refreshData() async {
@@ -83,6 +85,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('AdminDashboard._refreshData: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }

@@ -43,7 +43,7 @@ class ReceptionRepository {
           .select('''
             *,
             clients:profiles!bookings_client_id_fkey(full_name),
-            therapists:profiles!bookings_therapist_id_fkey(full_name),
+            therapists:staff!bookings_therapist_id_fkey(full_name),
             services(name)
           ''')
           .eq('booking_date', _dateStr(date))
@@ -219,7 +219,7 @@ class ReceptionRepository {
           .select('''
             *,
             clients:profiles!bookings_client_id_fkey(full_name),
-            therapists:profiles!bookings_therapist_id_fkey(full_name),
+            therapists:staff!bookings_therapist_id_fkey(full_name),
             services(name)
           ''')
           .eq('status', 'scheduled')
@@ -313,7 +313,7 @@ class ReceptionRepository {
           .select('''
             *,
             clients:profiles!bookings_client_id_fkey(full_name),
-            therapists:profiles!bookings_therapist_id_fkey(full_name),
+            therapists:staff!bookings_therapist_id_fkey(full_name),
             services(name)
           ''')
           .eq('client_id', clientId)

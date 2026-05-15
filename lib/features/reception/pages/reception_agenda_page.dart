@@ -215,7 +215,8 @@ class _ReceptionAgendaPageState extends State<ReceptionAgendaPage> {
   Widget _appointmentCard(Booking booking) {
     final isInactive   = booking.status == BookingStatus.cancelled ||
         booking.status == BookingStatus.completed;
-    final isPending    = booking.status == BookingStatus.scheduled;
+    final isPending    = booking.status == BookingStatus.scheduled ||
+        booking.status == BookingStatus.pending;
     final isConfirmed  = booking.status == BookingStatus.confirmed;
     final accentColor  = isPending
         ? const Color(0xFFFFB74D)
@@ -431,7 +432,8 @@ class _ReceptionAgendaPageState extends State<ReceptionAgendaPage> {
             )),
             const SizedBox(height: 12),
 
-            if (booking.status == BookingStatus.scheduled)
+            if (booking.status == BookingStatus.scheduled ||
+                booking.status == BookingStatus.pending)
               _bsAction(Icons.person_add_rounded, 'Asignar Terapeuta',
                   SaharaColors.gold, () {
                 Navigator.pop(ctx);
@@ -449,6 +451,7 @@ class _ReceptionAgendaPageState extends State<ReceptionAgendaPage> {
               }),
 
             if (booking.status == BookingStatus.scheduled ||
+                booking.status == BookingStatus.pending ||
                 booking.status == BookingStatus.confirmed) ...[
               _bsAction(Icons.payment_rounded, 'Cobrar Servicio',
                   const Color(0xFF4CAF50), () {
@@ -1121,6 +1124,7 @@ class _TherapistRow extends StatelessWidget {
               final busy = bookings.any((b) =>
                   b.therapistId == t['id'] &&
                   (b.status == BookingStatus.confirmed ||
+                   b.status == BookingStatus.pending ||
                    b.status == BookingStatus.scheduled));
               return _Chip(
                 label:      (t['full_name'] as String? ?? '').split(' ')[0],

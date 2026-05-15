@@ -390,6 +390,7 @@ class _TimelineCard extends StatelessWidget {
   });
 
   Color get _accentColor => switch (booking.status) {
+    BookingStatus.pending => const Color(0xFFFFB74D),
     BookingStatus.confirmed => const Color(0xFF4CAF50),
     BookingStatus.completed => const Color(0xFF64B5F6),
     BookingStatus.cancelled => const Color(0xFFEF5350),
@@ -399,6 +400,7 @@ class _TimelineCard extends StatelessWidget {
   bool get _canComplete =>
       isToday &&
       (booking.status == BookingStatus.confirmed ||
+       booking.status == BookingStatus.pending ||
        booking.status == BookingStatus.scheduled);
 
   @override
@@ -558,6 +560,7 @@ class _BookingDetailSheetState extends State<_BookingDetailSheet> {
 
   bool get _canComplete =>
       widget.booking.status == BookingStatus.confirmed ||
+      widget.booking.status == BookingStatus.pending ||
       widget.booking.status == BookingStatus.scheduled;
 
   Future<void> _markCompleted() async {

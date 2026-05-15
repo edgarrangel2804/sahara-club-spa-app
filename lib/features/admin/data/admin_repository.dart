@@ -171,7 +171,7 @@ class SaharaAdminRepository {
             .gte('expense_date', startStr)
             .lt('expense_date', endStr),
         _db.from('bookings')
-            .select('price, therapists:profiles!bookings_therapist_id_fkey(commission_pct)')
+            .select('price, therapists:staff!bookings_therapist_id_fkey(full_name)')
             .gte('booking_date', startStr)
             .lt('booking_date', endStr)
             .eq('status', 'completed'),
@@ -327,7 +327,7 @@ class SaharaAdminRepository {
 
       final results = await Future.wait([
         _db.from('bookings').select('id').eq('booking_date', todayStr),
-        _db.from('profiles').select('id').eq('role', 'therapist'),
+        _db.from('profiles').select('id').eq('role', 'therapist').not('is_active', 'eq', false),
         _db.from('profiles').select('id, created_at').eq('role', 'client'),
         _db.from('bookings').select('id').eq('booking_date', todayStr).eq('status', 'cancelled'),
         _db.from('bookings').select('client_id'),
@@ -387,7 +387,7 @@ class SaharaAdminRepository {
           .from('bookings')
           .select('''
             *,
-            therapists:profiles!bookings_therapist_id_fkey(full_name),
+            therapists:staff!bookings_therapist_id_fkey(full_name),
             clients:profiles!bookings_client_id_fkey(full_name)
           ''')
           .eq('booking_date', todayStr)
@@ -554,7 +554,7 @@ class SaharaAdminRepository {
           .select('''
             *,
             clients:profiles!bookings_client_id_fkey(full_name),
-            therapists:profiles!bookings_therapist_id_fkey(full_name)
+            therapists:staff!bookings_therapist_id_fkey(full_name)
           ''')
           .order('booking_date', ascending: false)
           .order('booking_time', ascending: false);

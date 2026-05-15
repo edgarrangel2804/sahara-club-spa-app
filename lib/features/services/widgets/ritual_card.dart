@@ -25,6 +25,8 @@ class RitualCard extends StatelessWidget {
       ServiceCategory.tecnologiaCorporal  => const Color(0xFF2D6B7A),
       ServiceCategory.experienciasFusionadas => const Color(0xFF7A5C2D),
       ServiceCategory.saharaHouse         => const Color(0xFF5C2D2D),
+      ServiceCategory.facialesPremium     => const Color(0xFF9B4D6B),
+      ServiceCategory.colaboraciones      => const Color(0xFF4A7A5C),
     };
   }
 
@@ -38,6 +40,8 @@ class RitualCard extends StatelessWidget {
       ServiceCategory.tecnologiaCorporal  => 'assets/images/03.png',
       ServiceCategory.experienciasFusionadas => 'assets/images/05.png',
       ServiceCategory.saharaHouse         => 'assets/images/08.png',
+      ServiceCategory.facialesPremium     => 'assets/images/01.png',
+      ServiceCategory.colaboraciones      => 'assets/images/05.png',
     };
   }
 

@@ -62,10 +62,10 @@ class _HomeViewState extends State<_HomeView> {
             .select('''
               id, booking_date, booking_time, status, service_name,
               services(name),
-              therapists:profiles!bookings_therapist_id_fkey(full_name)
+              therapists:staff!bookings_therapist_id_fkey(full_name)
             ''')
             .eq('client_id', user.id)
-            .inFilter('status', ['scheduled', 'confirmed'])
+            .inFilter('status', ['scheduled', 'pending', 'confirmed', 'checked_in', 'in_progress'])
             .gte('booking_date', today)
             .order('booking_date')
             .order('booking_time')
@@ -86,7 +86,8 @@ class _HomeViewState extends State<_HomeView> {
           _loadingBooking = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ServicesScreen._loadData: $e');
       if (mounted) setState(() => _loadingBooking = false);
     }
   }
@@ -99,9 +100,37 @@ class _HomeViewState extends State<_HomeView> {
         decoration: const BoxDecoration(gradient: SaharaGradients.backgroundMain),
         child: BlocBuilder<ServicesBloc, ServicesState>(
         builder: (context, state) {
-          if (state is! ServicesLoaded) {
+          if (state is ServicesLoading || state is ServicesInitial) {
             return const Center(child: CircularProgressIndicator(
                 color: SaharaColors.gold, strokeWidth: 1.5));
+          }
+          if (state is ServicesError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.wifi_off_rounded,
+                      color: SaharaColors.grayText.withValues(alpha: 0.25),
+                      size: 44),
+                  const SizedBox(height: 14),
+                  Text(state.message,
+                      style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: SaharaColors.grayText.withValues(alpha: 0.5))),
+                  const SizedBox(height: 18),
+                  TextButton(
+                    onPressed: () => context
+                        .read<ServicesBloc>()
+                        .add(const ServicesLoadRequested()),
+                    child: Text('Reintentar',
+                        style: GoogleFonts.inter(color: SaharaColors.gold)),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (state is! ServicesLoaded) {
+            return const SizedBox.shrink();
           }
           final all = state.all;
           final filtered = _selected == null
@@ -507,6 +536,8 @@ class _ServiceGridCard extends StatelessWidget {
     ServiceCategory.tecnologiaCorporal  => 'assets/images/03.png',
     ServiceCategory.experienciasFusionadas => 'assets/images/05.png',
     ServiceCategory.saharaHouse         => 'assets/images/08.png',
+    ServiceCategory.facialesPremium     => 'assets/images/01.png',
+    ServiceCategory.colaboraciones      => 'assets/images/05.png',
   };
 
   static Color _accentFor(ServiceCategory cat) => switch (cat) {
@@ -518,6 +549,8 @@ class _ServiceGridCard extends StatelessWidget {
     ServiceCategory.tecnologiaCorporal  => const Color(0xFF2D6B7A),
     ServiceCategory.experienciasFusionadas => const Color(0xFF7A5C2D),
     ServiceCategory.saharaHouse         => const Color(0xFF5C2D2D),
+    ServiceCategory.facialesPremium     => const Color(0xFF6B3A7C),
+    ServiceCategory.colaboraciones      => const Color(0xFF3A6B4A),
   };
 
   @override

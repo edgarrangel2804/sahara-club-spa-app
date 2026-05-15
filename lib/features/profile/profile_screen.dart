@@ -6,6 +6,7 @@ import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/features/memberships/memberships_screen.dart';
+import 'package:sahara_club_spa_app/features/orders/screens/my_orders_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -448,9 +449,54 @@ class _ProfileScreenState extends State<ProfileScreen>
         const SizedBox(height: 14),
         _readonlyField(label: 'Correo electrónico', value: _email, icon: Icons.mail_outline),
         const SizedBox(height: 32),
+        _buildMyOrdersBanner(),
+        const SizedBox(height: 12),
         _buildMembershipBanner(),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  Widget _buildMyOrdersBanner() {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A0A),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: SaharaColors.grayDark.withValues(alpha: 0.7),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: SaharaColors.grayDark,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.receipt_long_outlined,
+                  color: SaharaColors.grayText, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text('Mis Órdenes',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: SaharaColors.whiteSoft,
+                    fontWeight: FontWeight.w400,
+                  )),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: SaharaColors.grayText.withValues(alpha: 0.4), size: 18),
+          ],
+        ),
+      ),
     );
   }
 
