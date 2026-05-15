@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/features/shop/controllers/shop_cart_controller.dart';
 import 'package:sahara_club_spa_app/features/shop/models/cart_item.dart';
+import 'package:sahara_club_spa_app/features/shop/screens/checkout_screen.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
@@ -226,15 +227,10 @@ class CartScreen extends StatelessWidget {
   }
 
   void _handleCheckout(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-        'Checkout próximamente',
-        style: GoogleFonts.inter(fontSize: 13, color: SaharaColors.whiteSoft),
-      ),
-      backgroundColor: const Color(0xFF1A1A1A),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    ));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CheckoutScreen()),
+    );
   }
 }
 
