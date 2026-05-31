@@ -67,6 +67,11 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
     if (user == null) return;
     setState(() { _loading = true; _error = null; });
     try {
+      // RLS hace el filtrado: el rol client solo ve bookings cuyo client_id es
+      // su uid (cuenta) o cuyo client_record_id apunta a un clients ligado a
+      // su profile (citas walk-in que recepción creó por teléfono y después
+      // se vincularon al perfil cuando el cliente se registró). No metemos
+      // .eq('client_id', user.id) para no excluir las walk-in vinculadas.
       final raw = await _db
           .from('bookings')
           .select('''
@@ -75,7 +80,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
             services(name, category),
             therapists:staff!bookings_therapist_id_fkey(full_name)
           ''')
-          .eq('client_id', user.id)
           .order('booking_date', ascending: false)
           .order('booking_time', ascending: false);
       if (mounted) setState(() => _bookings = (raw as List).cast());
