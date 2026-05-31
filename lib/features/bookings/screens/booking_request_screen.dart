@@ -3,10 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/models/spa_service.dart';
 import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
+
+// URL del Payment Element del web. Cuando el anticipo está habilitado, la app
+// crea la cita con status='pending_payment' y abre esta URL en el navegador.
+// El web carga el Payment Element de Stripe con el client_secret devuelto por
+// la edge function create_appointment_deposit_payment_intent. El webhook de
+// Stripe actualiza la cita a 'payment_received' y luego 'confirmed' una vez
+// recepción/admin valida.
+const _kDepositPaymentUrlPrefix = 'https://saharaclubspa.com/pagar-anticipo/';
 
 class BookingRequestScreen extends StatefulWidget {
   final SpaService service;
@@ -95,6 +104,121 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
     }
   }
 
+  /// Lee `ai_settings.appointment_deposit_*` para saber si el negocio exige
+  /// anticipo y cuál es el monto. Si la lectura falla, devolvemos null y la
+  /// cita se crea sin anticipo (failsafe — preferimos crear la cita a fallar
+  /// el flujo completo).
+  Future<Map<String, dynamic>?> _loadDepositConfig() async {
+    try {
+      final row = await _db
+          .from('ai_settings')
+          .select('appointment_deposit_enabled, appointment_deposit_amount')
+          .eq('id', 1)
+          .maybeSingle();
+      if (row == null) return null;
+      return {
+        'enabled': row['appointment_deposit_enabled'] == true,
+        'amount': row['appointment_deposit_amount'],
+      };
+    } catch (e) {
+      debugPrint('BookingRequest._loadDepositConfig: $e');
+      return null;
+    }
+  }
+
+  /// Muestra un diálogo explicando el anticipo y al confirmar abre el
+  /// Payment Element del web en navegador externo. Si el cliente cancela, la
+  /// cita ya quedó en pending_payment y puede pagar después desde Mis Citas.
+  Future<void> _promptDepositPayment({
+    required String bookingId,
+    required int amount,
+  }) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: SaharaColors.black,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: SaharaColors.gold.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.payments_rounded,
+                  color: SaharaColors.gold, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Anticipo para reservar',
+                style: GoogleFonts.inter(
+                  color: SaharaColors.whiteSoft,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Para asegurar tu espacio, Sahara Club Spa requiere un anticipo de '
+          '\$$amount MXN. Te abriremos la página segura de pago. '
+          'Después de pagar, recepción confirmará tu cita.',
+          style: GoogleFonts.inter(
+            color: SaharaColors.grayText,
+            fontSize: 13.5,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, false),
+            child: Text(
+              'Pagar más tarde',
+              style: GoogleFonts.inter(color: SaharaColors.grayText),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: SaharaColors.gold,
+              foregroundColor: SaharaColors.black,
+            ),
+            child: Text(
+              'Pagar \$$amount ahora',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (accepted == true) {
+      final url = Uri.parse('$_kDepositPaymentUrlPrefix$bookingId');
+      try {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+        if (mounted) {
+          _showSnack('Te abrimos la página de pago. Vuelve a la app cuando termines.');
+        }
+      } catch (e) {
+        debugPrint('BookingRequest launchUrl: $e');
+        if (mounted) {
+          _showSnack(
+            'No pudimos abrir la página de pago. Puedes pagar después desde Mis Citas.',
+            isError: true,
+          );
+        }
+      }
+    } else if (mounted) {
+      _showSnack(
+        '¡Cita reservada! Recuerda pagar el anticipo desde Mis Citas para que recepción la confirme.',
+      );
+    }
+  }
+
   /// Llama al RPC `check_availability_for_booking_from_ai` para validar
   /// horario, terapeuta, horario laboral, comida, bloqueos y colisiones.
   /// Devuelve el JSON crudo del RPC o null si hay error de red.
@@ -143,30 +267,55 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       return;
     }
 
-    // 2. Insertar booking. Si el cliente no pidió terapeuta específico, el RPC
+    // 2. Leer si el negocio requiere anticipo. Si está habilitado, la cita
+    // se crea como 'pending_payment' y abrimos el navegador al Payment Element
+    // del web. Si no, va directo a 'scheduled' como antes.
+    final depositConfig = await _loadDepositConfig();
+    final requiresDeposit = depositConfig != null && depositConfig['enabled'] == true;
+    final depositAmount = (depositConfig?['amount'] as num?)?.toInt() ?? 0;
+
+    // 3. Insertar booking. Si el cliente no pidió terapeuta específico, el RPC
     // sugirió una pero NO la asignamos automáticamente — la cita queda
     // "sin asignar" (therapist_id NULL) y recepción decide quién atiende.
     try {
-      await _db.from('bookings').insert({
-        'client_id':    user.id,
-        'therapist_id': _selectedTherapistId,
-        'service_id':   _selectedDuration?.serviceId ?? widget.service.id,
-        'service_name': widget.service.name,
-        'booking_date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-        'booking_time': '${_selectedTime!}:00',
-        'duration_min': _selectedDuration?.minutes ?? 60,
-        'price':        _selectedDuration?.price ?? 0,
-        'status':       'scheduled',
-        'client_notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        'created_by':   user.id,
-      });
+      final inserted = await _db
+          .from('bookings')
+          .insert({
+            'client_id':    user.id,
+            'therapist_id': _selectedTherapistId,
+            'service_id':   _selectedDuration?.serviceId ?? widget.service.id,
+            'service_name': widget.service.name,
+            'booking_date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+            'booking_time': '${_selectedTime!}:00',
+            'duration_min': _selectedDuration?.minutes ?? 60,
+            'price':        _selectedDuration?.price ?? 0,
+            'status':       requiresDeposit ? 'pending_payment' : 'scheduled',
+            'payment_requirement': requiresDeposit ? 'deposit_required' : null,
+            'deposit_amount': requiresDeposit ? depositAmount : null,
+            'deposit_required_cents': requiresDeposit ? depositAmount * 100 : null,
+            'client_notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+            'created_by':   user.id,
+          })
+          .select('id')
+          .single();
 
-      if (mounted) {
+      final newBookingId = inserted['id']?.toString();
+
+      if (!mounted) return;
+
+      if (requiresDeposit && newBookingId != null) {
+        // Mostrar diálogo y abrir Payment Element en navegador externo.
+        await _promptDepositPayment(
+          bookingId: newBookingId,
+          amount: depositAmount,
+        );
+      } else {
         _showSnack('¡Solicitud enviada! La recepcionista confirmará tu cita pronto.');
-        await Future.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          Navigator.of(context).popUntil(ModalRoute.withName(AppRoutes.services));
-        }
+      }
+
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) {
+        Navigator.of(context).popUntil(ModalRoute.withName(AppRoutes.services));
       }
     } catch (e) {
       if (mounted) _showSnack('Error al enviar: $e', isError: true);

@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:sahara_club_spa_app/core/theme.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
 import 'package:sahara_club_spa_app/features/client/pages/client_messages_page.dart';
+
+// Misma URL que usa booking_request_screen al crear cita con anticipo.
+// La tarjeta de cita ofrece este enlace para que el cliente pueda pagar más
+// tarde cualquier cita en pending_payment.
+const _kDepositPaymentUrlPrefix = 'https://saharaclubspa.com/pagar-anticipo/';
 
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
@@ -65,6 +71,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen>
           .from('bookings')
           .select('''
             id, booking_date, booking_time, duration_min, status, price, client_notes,
+            payment_requirement, deposit_amount, deposit_paid_cents,
             services(name, category),
             therapists:staff!bookings_therapist_id_fkey(full_name)
           ''')
@@ -256,44 +263,80 @@ class _BookingCard extends StatefulWidget {
 }
 
 class _BookingCardState extends State<_BookingCard> {
+  // Paleta alineada con el web admin (paleta pastel premium adaptada al
+  // theme oscuro de la app).
   static Color _statusColor(String status) => switch (status) {
-    'confirmed'  => const Color(0xFF4CAF50),
-    'checked_in' => const Color(0xFF2088D8),
-    'in_progress' => const Color(0xFF6A54E0),
-    'completed'  => const Color(0xFF64B5F6),
-    'awaiting_payment' => const Color(0xFFB06A1F),
-    'paid'       => const Color(0xFF0E8F55),
-    'cancelled'  => const Color(0xFFEF5350),
-    'rescheduled' => const Color(0xFF0A9AA4),
-    'no_show'    => const Color(0xFFFF7043),
-    _            => const Color(0xFFFFB74D),
+    'confirmed'         => const Color(0xFF5DAA6E), // verde pistache
+    'scheduled'         => const Color(0xFF5C8CC9), // azul pastel — Agendada
+    'pending'           => const Color(0xFF5C8CC9),
+    'pending_reception' => const Color(0xFF5C8CC9),
+    'pending_payment'   => const Color(0xFFD9A23B), // ámbar — esperando anticipo
+    'payment_received'  => const Color(0xFF5DAA6E), // verde — pagada por confirmar
+    'checked_in'        => const Color(0xFFD9A23B), // ámbar — en servicio
+    'in_progress'       => const Color(0xFFD9A23B),
+    'completed'         => const Color(0xFF8C8478), // gris — finalizada
+    'awaiting_payment'  => const Color(0xFFB06A1F),
+    'paid'              => const Color(0xFF0E8F55),
+    'cancelled'         => const Color(0xFFC77878), // coral
+    'rescheduled'       => const Color(0xFF5C8CC9),
+    'no_show'           => const Color(0xFFC77878),
+    _                   => const Color(0xFF5C8CC9),
   };
 
   static String _statusLabel(String status) => switch (status) {
-    'confirmed'  => 'Confirmada',
-    'checked_in' => 'Check-in',
-    'in_progress' => 'En proceso',
-    'completed'  => 'Completada',
-    'awaiting_payment' => 'Pendiente de cobro',
-    'paid'       => 'Pagada',
-    'cancelled'  => 'Cancelada',
-    'rescheduled' => 'Reagendada',
-    'no_show'    => 'No asistí',
-    _            => 'Pendiente',
+    'confirmed'         => 'Confirmada',
+    'scheduled'         => 'Agendada',
+    'pending'           => 'Agendada',
+    'pending_reception' => 'Agendada · por revisar',
+    'pending_payment'   => 'Esperando anticipo',
+    'payment_received'  => 'Pago recibido · por confirmar',
+    'checked_in'        => 'En servicio',
+    'in_progress'       => 'En servicio',
+    'completed'         => 'Finalizada',
+    'awaiting_payment'  => 'Pendiente de cobro',
+    'paid'              => 'Pagada',
+    'cancelled'         => 'Cancelada',
+    'rescheduled'       => 'Reagendada',
+    'no_show'           => 'No asistí',
+    _                   => 'Agendada',
   };
 
   static IconData _statusIcon(String status) => switch (status) {
-    'confirmed'  => Icons.check_circle_outline,
-    'checked_in' => Icons.login_rounded,
-    'in_progress' => Icons.spa_rounded,
-    'completed'  => Icons.done_all_rounded,
-    'awaiting_payment' => Icons.payments_outlined,
-    'paid'       => Icons.paid_outlined,
-    'cancelled'  => Icons.cancel_outlined,
-    'rescheduled' => Icons.event_repeat_outlined,
-    'no_show'    => Icons.event_busy_outlined,
-    _            => Icons.schedule_rounded,
+    'confirmed'         => Icons.check_circle_outline,
+    'scheduled'         => Icons.event_available_rounded,
+    'pending'           => Icons.event_available_rounded,
+    'pending_reception' => Icons.event_available_rounded,
+    'pending_payment'   => Icons.payments_rounded,
+    'payment_received'  => Icons.task_alt_rounded,
+    'checked_in'        => Icons.login_rounded,
+    'in_progress'       => Icons.spa_rounded,
+    'completed'         => Icons.done_all_rounded,
+    'awaiting_payment'  => Icons.payments_outlined,
+    'paid'              => Icons.paid_outlined,
+    'cancelled'         => Icons.cancel_outlined,
+    'rescheduled'       => Icons.event_repeat_outlined,
+    'no_show'           => Icons.event_busy_outlined,
+    _                   => Icons.schedule_rounded,
   };
+
+  /// Abre el Payment Element del web para que el cliente pague el anticipo
+  /// pendiente de esta cita.
+  Future<void> _openDepositPayment(String bookingId) async {
+    final url = Uri.parse('$_kDepositPaymentUrlPrefix$bookingId');
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('_openDepositPayment: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No pudimos abrir la página de pago: $e',
+              style: GoogleFonts.inter(color: SaharaColors.whiteSoft)),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +428,16 @@ class _BookingCardState extends State<_BookingCard> {
                     fontStyle: FontStyle.italic,
                   ), maxLines: 2, overflow: TextOverflow.ellipsis),
                 ],
+                if (status == 'pending_payment') ...[
+                  const SizedBox(height: 14),
+                  _DepositCallToAction(
+                    amount: (widget.booking['deposit_amount'] as num?)?.toInt() ?? 0,
+                    onPay: () {
+                      final id = widget.booking['id']?.toString();
+                      if (id != null) _openDepositPayment(id);
+                    },
+                  ),
+                ],
                 if (widget.onContactReception != null) ...[
                   const SizedBox(height: 14),
                   Divider(color: SaharaColors.gold.withValues(alpha: 0.1), height: 1),
@@ -440,6 +493,73 @@ class _InfoPill extends StatelessWidget {
         const SizedBox(width: 5),
         Text(label, style: GoogleFonts.inter(fontSize: 12, color: color)),
       ],
+    );
+  }
+}
+
+// ── CTA "Pagar anticipo" para citas en pending_payment ────────────────────────
+class _DepositCallToAction extends StatelessWidget {
+  final int amount;
+  final VoidCallback onPay;
+  const _DepositCallToAction({required this.amount, required this.onPay});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD9A23B).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFFD9A23B).withValues(alpha: 0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.info_outline_rounded,
+                  size: 16, color: Color(0xFFD9A23B)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Para confirmar tu cita necesitamos tu anticipo.',
+                  style: GoogleFonts.inter(
+                    color: SaharaColors.whiteSoft,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onPay,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD9A23B),
+                foregroundColor: SaharaColors.black,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.payments_rounded, size: 18),
+              label: Text(
+                amount > 0 ? 'Pagar anticipo · \$$amount MXN' : 'Pagar anticipo',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
