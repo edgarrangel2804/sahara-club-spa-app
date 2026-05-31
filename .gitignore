@@ -8,6 +8,9 @@
 .build/
 .buildlog/
 .history
+
+# Claude Code local config (puede contener tokens / paths personales)
+.claude/
 .svn/
 .swiftpm/
 migrate_working_dir/
