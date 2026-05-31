@@ -95,6 +95,29 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
     }
   }
 
+  /// Llama al RPC `check_availability_for_booking_from_ai` para validar
+  /// horario, terapeuta, horario laboral, comida, bloqueos y colisiones.
+  /// Devuelve el JSON crudo del RPC o null si hay error de red.
+  Future<Map<String, dynamic>?> _validateAvailability() async {
+    try {
+      final res = await _db.rpc(
+        'check_availability_for_booking_from_ai',
+        params: {
+          'p_service_id': _selectedDuration?.serviceId ?? widget.service.id,
+          'p_requested_date': DateFormat('yyyy-MM-dd').format(_selectedDate),
+          'p_requested_time': '${_selectedTime!}:00',
+          'p_duration_min': _selectedDuration?.minutes ?? 60,
+          if (_selectedTherapistId != null) 'p_staff_id': _selectedTherapistId,
+        },
+      );
+      if (res is Map) return Map<String, dynamic>.from(res);
+      return null;
+    } catch (e) {
+      debugPrint('BookingRequest._validateAvailability: $e');
+      return null;
+    }
+  }
+
   Future<void> _sendRequest() async {
     if (_selectedTime == null) {
       _showSnack('Elige un horario para continuar', isError: true);
@@ -106,33 +129,23 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
 
     setState(() => _sending = true);
 
-    // Verificar disponibilidad si se eligió terapeuta específica
-    if (_selectedTherapistId != null) {
-      try {
-        final rows = await _db
-            .from('bookings')
-            .select('id')
-            .eq('therapist_id', _selectedTherapistId!)
-            .eq('booking_date', DateFormat('yyyy-MM-dd').format(_selectedDate))
-            .neq('status', 'cancelled')
-            .neq('status', 'no_show');
-        final conflict = (rows as List).any((r) =>
-            (r['booking_time'] as String?)?.startsWith(_selectedTime!) == true);
-        if (conflict) {
-          if (mounted) {
-            _showSnack(
-              'Esa terapeuta ya tiene una cita a esa hora. Elige otro horario o selecciona "Sin preferencia".',
-              isError: true,
-            );
-            setState(() { _sending = false; _occupiedSlots = {..._occupiedSlots, _selectedTime!}; _selectedTime = null; });
-          }
-          return;
-        }
-      } catch (e) {
-        debugPrint('BookingRequest._sendRequest conflict check: $e');
+    // 1. Validar disponibilidad real contra business_hours, schedule_blocks,
+    // staff_working_hours, staff_time_off y bookings activos.
+    final check = await _validateAvailability();
+    if (check != null && check['available'] != true) {
+      if (mounted) {
+        setState(() => _sending = false);
+        await _showSuggestionsSheet(
+          reasonLabel: (check['details'] ?? 'Ese horario no está disponible.').toString(),
+          suggestions: (check['suggested_slots'] as List?) ?? const [],
+        );
       }
+      return;
     }
 
+    // 2. Insertar booking. Si el cliente no pidió terapeuta específico, el RPC
+    // sugirió una pero NO la asignamos automáticamente — la cita queda
+    // "sin asignar" (therapist_id NULL) y recepción decide quién atiende.
     try {
       await _db.from('bookings').insert({
         'client_id':    user.id,
@@ -169,6 +182,201 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
+  }
+
+  /// Bottom sheet con horarios alternativos cuando el RPC devuelve
+  /// available=false. El cliente puede tocar una sugerencia y el form se
+  /// actualiza con esa fecha/hora/terapeuta; al hacer "Continuar" se reintenta
+  /// el envío. Si decide cerrar el sheet manualmente, el form queda intacto.
+  Future<void> _showSuggestionsSheet({
+    required String reasonLabel,
+    required List<dynamic> suggestions,
+  }) async {
+    final list = suggestions.cast<Map<String, dynamic>>();
+    final pick = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: SaharaColors.black,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36, height: 4,
+                    decoration: BoxDecoration(
+                      color: SaharaColors.grayText.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Horario no disponible',
+                  style: GoogleFonts.inter(
+                    color: SaharaColors.whiteSoft,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  reasonLabel,
+                  style: GoogleFonts.inter(
+                    color: SaharaColors.grayText,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (list.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Text(
+                      'No tenemos alternativas cercanas. Prueba otro día.',
+                      style: GoogleFonts.inter(
+                        color: SaharaColors.grayText,
+                        fontSize: 13,
+                      ),
+                    ),
+                  )
+                else ...[
+                  Text(
+                    'Te ofrecemos estas opciones:',
+                    style: GoogleFonts.inter(
+                      color: SaharaColors.gold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) {
+                        final s = list[i];
+                        final dateStr = s['date']?.toString() ?? '';
+                        final timeStr = (s['time']?.toString() ?? '').substring(
+                          0,
+                          (s['time']?.toString().length ?? 0).clamp(0, 5),
+                        );
+                        final staffName = s['staff_name']?.toString() ?? 'Equipo Sahara';
+                        DateTime? parsedDate;
+                        try {
+                          parsedDate = DateFormat('yyyy-MM-dd').parse(dateStr);
+                        } catch (_) {
+                          parsedDate = null;
+                        }
+                        final niceDate = parsedDate == null
+                            ? dateStr
+                            : DateFormat("EEEE d 'de' MMMM", 'es').format(parsedDate);
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.pop(sheetCtx, {
+                            'date': dateStr,
+                            'time': timeStr,
+                            'staff_id': s['staff_id']?.toString(),
+                            'staff_name': staffName,
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: SaharaColors.gold.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: SaharaColors.gold.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: SaharaColors.gold.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.schedule_rounded,
+                                    color: SaharaColors.gold,
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '$niceDate · $timeStr',
+                                        style: GoogleFonts.inter(
+                                          color: SaharaColors.whiteSoft,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Con $staffName',
+                                        style: GoogleFonts.inter(
+                                          color: SaharaColors.grayText,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: SaharaColors.grayText,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (pick == null) return;
+    final dateStr = pick['date']?.toString();
+    final timeStr = pick['time']?.toString();
+    if (dateStr == null || timeStr == null) return;
+    try {
+      final d = DateFormat('yyyy-MM-dd').parse(dateStr);
+      if (!mounted) return;
+      setState(() {
+        _selectedDate = d;
+        _selectedTime = timeStr;
+        // Si la sugerencia trae staff_id y el cliente no había elegido
+        // terapeuta, no la fijamos — la cita queda sin asignar y recepción
+        // decide. Si el cliente SÍ pidió terapeuta específica, respetamos
+        // su elección original.
+      });
+      _loadOccupiedSlots();
+      _showSnack('Horario actualizado. Toca "Solicitar cita" para confirmar.');
+    } catch (e) {
+      debugPrint('BookingRequest pick parse error: $e');
+    }
   }
 
   @override
