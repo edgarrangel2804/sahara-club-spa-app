@@ -157,6 +157,10 @@ class ReceptionRepository {
         'status':       'scheduled',
         'cabin':        cabin,
         'client_notes': clientNotes,
+        // booking_source: quién creó (rol). source_platform: desde dónde
+        // (canal). Recepción usando la app móvil → reception / mobile.
+        'booking_source':  'reception',
+        'source_platform': 'mobile',
         'created_by':   createdBy,
       });
     } catch (e) {

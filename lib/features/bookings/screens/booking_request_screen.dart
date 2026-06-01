@@ -278,6 +278,13 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
     // sugirió una pero NO la asignamos automáticamente — la cita queda
     // "sin asignar" (therapist_id NULL) y recepción decide quién atiende.
     try {
+      // booking_source es CRÍTICO. El trigger handle_booking_whatsapp_events
+      // hace coalesce(booking_source, 'reception'), así que sin este campo
+      // el cliente recibe el WhatsApp "Recepción te confirma tu cita..." al
+      // crear ELLA MISMA desde la app — flujo confuso. Marcando explícito
+      // como 'mobile_app' el trigger se queda silente al insertar y solo
+      // dispara cuando recepción confirma manualmente o cuando Stripe
+      // procesa el anticipo (status→payment_received).
       final inserted = await _db
           .from('bookings')
           .insert({
@@ -294,6 +301,8 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
             'deposit_amount': requiresDeposit ? depositAmount : null,
             'deposit_required_cents': requiresDeposit ? depositAmount * 100 : null,
             'client_notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+            'booking_source': 'mobile_app',
+            'source_platform': 'mobile',
             'created_by':   user.id,
           })
           .select('id')
