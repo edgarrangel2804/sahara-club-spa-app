@@ -11,6 +11,16 @@ import 'package:sahara_club_spa_app/core/router.dart';
 import 'package:sahara_club_spa_app/data/services/notification_service.dart';
 import 'package:sahara_club_spa_app/data/services/auth_service.dart';
 
+// Credenciales Supabase para el cliente móvil.
+//
+// La anon_key NO es secreta: Supabase la diseñó para vivir en clientes
+// públicos (web, móvil, navegador). Su único rol es identificar el proyecto.
+// La seguridad real la enforza RLS sobre cada tabla. La clave que JAMÁS debe
+// salir del servidor es service_role_key — esa no aparece en esta app.
+//
+// Si en el futuro queremos múltiples builds (staging vs prod), entonces sí
+// vale la pena moverlas a --dart-define. Hoy con un solo entorno está bien
+// hardcoded.
 const String _supabaseUrl = 'https://fkbyxhwdcsgrrixalzwf.supabase.co';
 const String _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYnl4aHdkY3NncnJpeGFsendmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NzE3MjYsImV4cCI6MjA5MzE0NzcyNn0.IJ2nDtgBPkbY8CRDmGGJTvE6kELrY0sp3_F9yseZP9Q';
 

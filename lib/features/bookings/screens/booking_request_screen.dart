@@ -37,12 +37,23 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
   List<Map<String, dynamic>> _therapists = [];
   Set<String> _occupiedSlots = {};
 
-  static final _timeSlots = List.generate(21, (i) {
-    final totalMin = 540 + i * 30; // 9:00 → 19:30
-    final h = totalMin ~/ 60;
-    final m = totalMin % 60;
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
-  });
+  // Slots de inicio cada 30 min dentro del horario del negocio. Inicia con un
+  // default razonable (9:00–19:00) y se actualiza al cargar business_settings.
+  List<String> _timeSlots = _defaultTimeSlots();
+
+  static List<String> _defaultTimeSlots() => _slotsBetween(9 * 60, 19 * 60);
+
+  static List<String> _slotsBetween(int startMin, int endMin) {
+    final list = <String>[];
+    // El último slot bookable comienza 30 min antes del cierre para que la
+    // cita de 30 min más corta termine al cierre.
+    for (var m = startMin; m + 30 <= endMin; m += 30) {
+      final h = m ~/ 60;
+      final mm = m % 60;
+      list.add('${h.toString().padLeft(2, '0')}:${mm.toString().padLeft(2, '0')}');
+    }
+    return list;
+  }
 
   @override
   void initState() {
@@ -51,6 +62,45 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       _selectedDuration = widget.service.durations.first;
     }
     _loadTherapists();
+    _loadBusinessHours();
+  }
+
+  /// Carga el rango horario del negocio desde `business_settings` para que
+  /// el grid de horarios refleje cuándo realmente atiende el spa. Si la
+  /// lectura falla, se queda con el default 09:00–19:00.
+  Future<void> _loadBusinessHours() async {
+    try {
+      final row = await _db
+          .from('business_settings')
+          .select('calendar_start_hour, calendar_end_hour')
+          .limit(1)
+          .maybeSingle();
+      if (row == null) return;
+      final startMin = _parseTimeToMinutes(row['calendar_start_hour']?.toString());
+      final endMin = _parseTimeToMinutes(row['calendar_end_hour']?.toString());
+      if (startMin == null || endMin == null || startMin >= endMin) return;
+      if (!mounted) return;
+      setState(() {
+        _timeSlots = _slotsBetween(startMin, endMin);
+        // Si la hora seleccionada cayó fuera del rango nuevo, limpiamos.
+        if (_selectedTime != null && !_timeSlots.contains(_selectedTime)) {
+          _selectedTime = null;
+        }
+      });
+    } catch (e) {
+      debugPrint('BookingRequest._loadBusinessHours: $e');
+    }
+  }
+
+  /// Convierte "08:00" / "08:00:00" / "8:0" a minutos del día. null si inválido.
+  static int? _parseTimeToMinutes(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final parts = raw.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null || h < 0 || h > 24 || m < 0 || m > 59) return null;
+    return h * 60 + m;
   }
 
   @override

@@ -576,10 +576,6 @@ class SaharaAdminRepository {
     }
   }
 
-  Future<void> updateAppointmentStatus(String id, String status) async {
-    await _db.from('appointments').update({'status': status}).eq('id', id);
-  }
-
   // ── Chat interno ──────────────────────────────────────────────────────────
 
   String get _myId => _db.auth.currentUser!.id;

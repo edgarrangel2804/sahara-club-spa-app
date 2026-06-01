@@ -147,10 +147,6 @@ class _LoginScreenState extends State<LoginScreen>
                       isLoading: _isLoading,
                     ),
                     const SizedBox(height: 24),
-                    _buildSocialDivider(),
-                    const SizedBox(height: 16),
-                    _buildSocialButtons(),
-                    const SizedBox(height: 28),
                     _buildFooterLinks(),
                     const SizedBox(height: 40),
                   ],
@@ -379,127 +375,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildSocialDivider() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(height: 0.5, color: SaharaColors.grayDark),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            'o continúa con',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: SaharaColors.grayText,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Container(height: 0.5, color: SaharaColors.grayDark),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSocialButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: _SocialButton(
-            label: 'Google',
-            icon: _GoogleIcon(),
-            onTap: () {}, // TODO: Google Sign-In
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SocialButton(
-            label: 'Facebook',
-            icon: const _FacebookIcon(),
-            onTap: () {}, // TODO: Facebook Sign-In
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Botón social genérico ───────────────────────────────────────────────────
-
-class _SocialButton extends StatelessWidget {
-  final String label;
-  final Widget icon;
-  final VoidCallback onTap;
-
-  const _SocialButton({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: SaharaColors.gold.withValues(alpha: 0.35),
-            width: 0.8,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            icon,
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: SaharaColors.whiteSoft.withValues(alpha: 0.85),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Íconos vectoriales (sin dependencias externas) ──────────────────────────
-
-class _GoogleIcon extends StatelessWidget {
-  const _GoogleIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 18,
-      height: 18,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: SaharaColors.gold, width: 1.5),
-      ),
-      child: const Center(
-        child: Text(
-          'G',
-          style: TextStyle(
-            color: SaharaColors.gold,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            height: 1.1,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ── Forgot password bottom sheet ─────────────────────────────────────────────
@@ -625,36 +500,6 @@ class _ForgotPasswordSheetState extends State<_ForgotPasswordSheet> {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-// ── Facebook icon ─────────────────────────────────────────────────────────────
-
-class _FacebookIcon extends StatelessWidget {
-  const _FacebookIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 18,
-      height: 18,
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: SaharaColors.gold, width: 1.5),
-      ),
-      child: const Center(
-        child: Text(
-          'f',
-          style: TextStyle(
-            color: SaharaColors.gold,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-          ),
-        ),
       ),
     );
   }
