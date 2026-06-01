@@ -154,26 +154,31 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
     }
   }
 
-  /// Lee `ai_settings.appointment_deposit_*` para saber si el negocio exige
-  /// anticipo y cuál es el monto. Si la lectura falla, devolvemos null y la
-  /// cita se crea sin anticipo (failsafe — preferimos crear la cita a fallar
-  /// el flujo completo).
-  Future<Map<String, dynamic>?> _loadDepositConfig() async {
+  // Política Sahara: en la app móvil el anticipo siempre es OBLIGATORIO antes
+  // de confirmar la cita. La toggle ai_settings.appointment_deposit_enabled
+  // controla el flujo de recepción/IA/web, pero móvil ignora la toggle —
+  // si el negocio activa el modo "sin anticipos para app", debe migrar la
+  // política aquí. Mientras tanto, mobile = pago siempre.
+  Future<Map<String, dynamic>> _loadDepositConfig() async {
+    int amount = 200; // fallback razonable si ai_settings está vacío
     try {
       final row = await _db
           .from('ai_settings')
-          .select('appointment_deposit_enabled, appointment_deposit_amount')
+          .select('appointment_deposit_amount')
           .eq('id', 1)
           .maybeSingle();
-      if (row == null) return null;
-      return {
-        'enabled': row['appointment_deposit_enabled'] == true,
-        'amount': row['appointment_deposit_amount'],
-      };
+      if (row != null) {
+        final raw = row['appointment_deposit_amount'];
+        if (raw is num) {
+          amount = raw.toInt();
+        } else if (raw is String) {
+          amount = int.tryParse(raw) ?? amount;
+        }
+      }
     } catch (e) {
       debugPrint('BookingRequest._loadDepositConfig: $e');
-      return null;
     }
+    return {'enabled': true, 'amount': amount};
   }
 
   /// Muestra un diálogo explicando el anticipo y al confirmar abre el
@@ -317,12 +322,11 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       return;
     }
 
-    // 2. Leer si el negocio requiere anticipo. Si está habilitado, la cita
-    // se crea como 'pending_payment' y abrimos el navegador al Payment Element
-    // del web. Si no, va directo a 'scheduled' como antes.
+    // 2. Móvil siempre requiere anticipo (política Sahara). Cita nace en
+    // pending_payment, cliente paga vía Stripe, webhook la pasa a
+    // payment_received, recepción luego confirma manualmente.
     final depositConfig = await _loadDepositConfig();
-    final requiresDeposit = depositConfig != null && depositConfig['enabled'] == true;
-    final depositAmount = (depositConfig?['amount'] as num?)?.toInt() ?? 0;
+    final depositAmount = (depositConfig['amount'] as int);
 
     // 3. Insertar booking. Si el cliente no pidió terapeuta específico, el RPC
     // sugirió una pero NO la asignamos automáticamente — la cita queda
@@ -335,10 +339,9 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       // como 'mobile_app' el trigger se queda silente al insertar y solo
       // dispara cuando recepción confirma manualmente o cuando Stripe
       // procesa el anticipo (status→payment_received).
-      // payment_requirement es NOT NULL en DB. 'deposit_required' cuando el
-      // negocio exige anticipo, 'waived' cuando no aplica (sin anticipo o
-      // exento por gift card / membresía — la app móvil sólo distingue
-      // requirido vs no requerido por ahora).
+      // Móvil = pago obligatorio. Cita nace pending_payment con anticipo
+      // requerido. Stripe webhook la moverá a payment_received cuando el
+      // cliente complete el pago. Recepción confirma manualmente al final.
       final inserted = await _db
           .from('bookings')
           .insert({
@@ -350,10 +353,10 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
             'booking_time': '${_selectedTime!}:00',
             'duration_min': _selectedDuration?.minutes ?? 60,
             'price':        _selectedDuration?.price ?? 0,
-            'status':       requiresDeposit ? 'pending_payment' : 'scheduled',
-            'payment_requirement': requiresDeposit ? 'deposit_required' : 'waived',
-            if (requiresDeposit) 'deposit_amount': depositAmount,
-            if (requiresDeposit) 'deposit_required_cents': depositAmount * 100,
+            'status':       'pending_payment',
+            'payment_requirement': 'deposit_required',
+            'deposit_amount': depositAmount,
+            'deposit_required_cents': depositAmount * 100,
             'client_notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
             'booking_source': 'mobile_app',
             'source_platform': 'mobile',
@@ -366,14 +369,12 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
 
       if (!mounted) return;
 
-      if (requiresDeposit && newBookingId != null) {
-        // Mostrar diálogo y abrir Payment Element en navegador externo.
+      // Mostrar diálogo y abrir Payment Element en navegador externo.
+      if (newBookingId != null) {
         await _promptDepositPayment(
           bookingId: newBookingId,
           amount: depositAmount,
         );
-      } else {
-        _showSnack('¡Solicitud enviada! La recepcionista confirmará tu cita pronto.');
       }
 
       await Future.delayed(const Duration(milliseconds: 800));
