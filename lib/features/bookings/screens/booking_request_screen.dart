@@ -335,6 +335,10 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
       // como 'mobile_app' el trigger se queda silente al insertar y solo
       // dispara cuando recepción confirma manualmente o cuando Stripe
       // procesa el anticipo (status→payment_received).
+      // payment_requirement es NOT NULL en DB. 'deposit_required' cuando el
+      // negocio exige anticipo, 'waived' cuando no aplica (sin anticipo o
+      // exento por gift card / membresía — la app móvil sólo distingue
+      // requirido vs no requerido por ahora).
       final inserted = await _db
           .from('bookings')
           .insert({
@@ -347,9 +351,9 @@ class _BookingRequestScreenState extends State<BookingRequestScreen> {
             'duration_min': _selectedDuration?.minutes ?? 60,
             'price':        _selectedDuration?.price ?? 0,
             'status':       requiresDeposit ? 'pending_payment' : 'scheduled',
-            'payment_requirement': requiresDeposit ? 'deposit_required' : null,
-            'deposit_amount': requiresDeposit ? depositAmount : null,
-            'deposit_required_cents': requiresDeposit ? depositAmount * 100 : null,
+            'payment_requirement': requiresDeposit ? 'deposit_required' : 'waived',
+            if (requiresDeposit) 'deposit_amount': depositAmount,
+            if (requiresDeposit) 'deposit_required_cents': depositAmount * 100,
             'client_notes': _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
             'booking_source': 'mobile_app',
             'source_platform': 'mobile',
