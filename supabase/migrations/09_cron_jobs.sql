@@ -5,12 +5,18 @@
 
 DO $$
 DECLARE
-  _svc_key  text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYnl4aHdkY3NncnJpeGFsendmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3MTcyNiwiZXhwIjoyMDkzMTQ3NzI2fQ.Q5XTR7Ax2HK9-foP1tRf1wrP_uQWoWfNlAESIRkz00U';
+  _svc_key  text;
   _base_url text := 'https://fkbyxhwdcsgrrixalzwf.supabase.co/functions/v1/send-booking-reminders';
   _hdr      text;
   _sql_day  text;
   _sql_2h   text;
 BEGIN
+  -- Lee la service_role key desde Vault (nunca hardcodear en el repo)
+  SELECT decrypted_secret INTO _svc_key
+  FROM vault.decrypted_secrets
+  WHERE name = 'service_role_key'
+  LIMIT 1;
+
   _hdr := '{"Content-Type":"application/json","Authorization":"Bearer ' || _svc_key || '"}';
 
   _sql_day :=

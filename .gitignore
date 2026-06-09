@@ -49,3 +49,21 @@ app.*.map.json
 
 # Supabase Vault setup — contains real service_role key, never commit
 supabase/vault_setup.sql
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# Secretos / credenciales — nunca versionar
+*firebase-adminsdk*.json
+serviceAccountKey*.json
+*-service-account-*.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+*.jks
+android/key.properties

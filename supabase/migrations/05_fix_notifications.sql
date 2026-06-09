@@ -1,17 +1,19 @@
 -- ============================================================
 -- 1. Guardar service_role_key en Vault (upsert seguro)
+--    IMPORTANTE: la key real NO se versiona. Siémbrala ejecutando
+--    supabase/vault_setup.sql (ignorado por git) ANTES de esta migración,
+--    o reemplaza el placeholder de abajo en tu entorno local.
 -- ============================================================
 DO $$
+DECLARE
+  _svc_key text := 'REEMPLAZAR_CON_SERVICE_ROLE_KEY';  -- ver supabase/vault_setup.sql
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'service_role_key') THEN
-    PERFORM vault.create_secret(
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYnl4aHdkY3NncnJpeGFsendmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3MTcyNiwiZXhwIjoyMDkzMTQ3NzI2fQ.Q5XTR7Ax2HK9-foP1tRf1wrP_uQWoWfNlAESIRkz00U',
-      'service_role_key'
-    );
+    PERFORM vault.create_secret(_svc_key, 'service_role_key');
   ELSE
     UPDATE vault.secrets
     SET secret = extensions.pgp_sym_encrypt(
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrYnl4aHdkY3NncnJpeGFsendmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3MTcyNiwiZXhwIjoyMDkzMTQ3NzI2fQ.Q5XTR7Ax2HK9-foP1tRf1wrP_uQWoWfNlAESIRkz00U',
+      _svc_key,
       (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1)
     )
     WHERE name = 'service_role_key';
